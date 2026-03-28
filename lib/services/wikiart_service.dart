@@ -211,6 +211,26 @@ class WikiArtService {
     return filepath;
   }
 
+  /// Download an image by URL and contentId to the app cache directory.
+  /// Returns the local file path. Returns cached file if already present.
+  Future<String> downloadImageUrl(String imageUrl, int contentId) async {
+    final dir = await getApplicationSupportDirectory();
+    final cacheDir = Directory('${dir.path}/ziba_cache');
+    if (!cacheDir.existsSync()) {
+      cacheDir.createSync(recursive: true);
+    }
+
+    final extension = imageUrl.split('.').last.split('!').first;
+    final filename = '$contentId.$extension';
+    final filepath = '${cacheDir.path}/$filename';
+
+    if (File(filepath).existsSync()) return filepath;
+
+    await _dio.download(imageUrl, filepath);
+    await _evictOldImages(cacheDir, keep: 30);
+    return filepath;
+  }
+
   Future<void> _evictOldImages(Directory dir, {int keep = 30}) async {
     final files = dir
         .listSync()
