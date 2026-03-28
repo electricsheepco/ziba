@@ -325,7 +325,20 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                   const SizedBox(height: 4),
                   Text(year, style: theme.textTheme.bodyMedium),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (artwork.style != null)
+                      _MetaChip(label: artwork.style!),
+                    if (artwork.genre != null)
+                      _MetaChip(label: artwork.genre!),
+                    if (artwork.technique != null)
+                      _MetaChip(label: artwork.technique!),
+                  ],
+                ),
+                const SizedBox(height: 20),
                 Row(
                   children: [
                     _ActionButton(
@@ -472,6 +485,34 @@ class _CropPainter extends CustomPainter {
   bool shouldRepaint(_CropPainter old) =>
       old.panOffset != panOffset ||
       old.screenAspectRatio != screenAspectRatio;
+}
+
+// ══════════════════════════════════════════════════
+// Metadata chip (style / genre / technique)
+// ══════════════════════════════════════════════════
+
+class _MetaChip extends StatelessWidget {
+  final String label;
+  const _MetaChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════
