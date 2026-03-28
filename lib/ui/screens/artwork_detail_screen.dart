@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -22,152 +21,150 @@ class ArtworkDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
-  bool _overlayVisible = true;
-  Timer? _dismissTimer;
   bool _cropMode = false;
   double _panOffset = 0.0;
 
   @override
-  void initState() {
-    super.initState();
-    _showOverlay();
-  }
-
-  @override
-  void dispose() {
-    _dismissTimer?.cancel();
-    super.dispose();
-  }
-
-  void _showOverlay() {
-    setState(() => _overlayVisible = true);
-    _dismissTimer?.cancel();
-    _dismissTimer = Timer(const Duration(seconds: 5), _hideOverlay);
-  }
-
-  void _hideOverlay() {
-    if (mounted) setState(() => _overlayVisible = false);
-  }
-
-  void _toggleOverlay() {
-    if (_overlayVisible) {
-      _hideOverlay();
-    } else {
-      _showOverlay();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final artwork = widget.artwork;
+
+    // Use actual display size for crop ratio — not window size
+    final display = ui.PlatformDispatcher.instance.displays.firstOrNull;
+    final displaySize = display != null
+        ? Size(display.size.width / display.devicePixelRatio,
+               display.size.height / display.devicePixelRatio)
+        : MediaQuery.of(context).size;
+
+    final showSlider = needsPanSlider(
+      imageNativeSize: Size(
+        (artwork.width ?? 1).toDouble(),
+        (artwork.height ?? 1).toDouble(),
+      ),
+      screenSize: displaySize,
+    );
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
           // Full-bleed image
-          GestureDetector(
-            onTap: _cropMode ? null : _toggleOverlay,
-            child: _buildImage(),
-          ),
+          _buildImage(),
 
-          // Metadata overlay
-          if (!_cropMode)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 400),
-                opacity: _overlayVisible ? 1.0 : 0.0,
-                child: _DetailMetadataOverlay(artwork: widget.artwork),
-              ),
-            ),
-
-          // Crop overlay
-          if (_cropMode) ...[
+          // Crop zone preview — always visible when wide image
+          if (showSlider)
             Positioned.fill(
               child: CustomPaint(
                 painter: _DetailCropPainter(
                   panOffset: _panOffset,
-                  screenAspectRatio: MediaQuery.of(context).size.width /
-                      MediaQuery.of(context).size.height,
+                  screenAspectRatio: displaySize.width / displaySize.height,
+                  preview: !_cropMode,
                 ),
               ),
             ),
-            if (needsPanSlider(
-              imageNativeSize: Size(
-                (widget.artwork.width ?? 1).toDouble(),
-                (widget.artwork.height ?? 1).toDouble(),
-              ),
-              screenSize: MediaQuery.of(context).size,
-            ))
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 64,
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    thumbColor: Colors.white,
-                    activeTrackColor: Colors.white70,
-                    inactiveTrackColor: Colors.white24,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 8),
-                    trackHeight: 2,
-                  ),
-                  child: Slider(
-                    value: _panOffset,
-                    onChanged: (v) => setState(() => _panOffset = v),
-                  ),
-                ),
-              ),
+
+          // Metadata overlay (hidden during crop mode)
+          if (!_cropMode)
             Positioned(
               left: 0,
               right: 0,
-              bottom: 16,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton.icon(
-                    onPressed: _cancelCrop,
-                    icon: const Icon(Icons.close,
-                        size: 16, color: Colors.white70),
-                    label: const Text('CANCEL',
-                        style: TextStyle(
-                            color: Colors.white70, fontSize: 11)),
-                  ),
-                  const SizedBox(width: 24),
-                  FilledButton.icon(
-                    onPressed: () => _applyCrop(context),
-                    icon: const Icon(Icons.check, size: 16),
-                    label: const Text('APPLY',
-                        style: TextStyle(fontSize: 11)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
+              bottom: showSlider ? 96 : 0,
+              child: _DetailMetadataOverlay(artwork: artwork),
+            ),
+
+          // Wallpaper crop slider + Apply/Cancel
+          if (showSlider)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                color: Colors.black54,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.crop, size: 12,
+                            color: Color(0xFF6B8EC4)),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'WALLPAPER CROP',
+                          style: TextStyle(
+                            fontSize: 10,
+                            letterSpacing: 1.5,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        thumbColor: const Color(0xFF6B8EC4),
+                        activeTrackColor: const Color(0xFF6B8EC4),
+                        inactiveTrackColor:
+                            const Color(0xFF6B8EC4).withValues(alpha: 0.2),
+                        overlayColor:
+                            const Color(0xFF6B8EC4).withValues(alpha: 0.15),
+                        thumbShape:
+                            const RoundSliderThumbShape(enabledThumbRadius: 7),
+                        trackHeight: 2,
+                      ),
+                      child: Slider(
+                        value: _panOffset,
+                        onChanged: (v) => setState(() => _panOffset = v),
+                      ),
+                    ),
+                    if (_cropMode)
+                      Row(
+                        children: [
+                          TextButton.icon(
+                            onPressed: () =>
+                                setState(() => _cropMode = false),
+                            icon: const Icon(Icons.close,
+                                size: 14, color: Colors.white70),
+                            label: const Text('CANCEL',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.white70)),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            onPressed: () => _applyCrop(context, displaySize),
+                            icon: const Icon(Icons.wallpaper, size: 14),
+                            label: const Text('SET AS WALLPAPER',
+                                style: TextStyle(fontSize: 11)),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF6B8EC4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
-          ],
 
-          // SET + REMOVE (bottom-right, hidden during crop)
+          // SET + REMOVE buttons (hidden during crop)
           if (!_cropMode)
             Positioned(
-              bottom: 16,
+              bottom: showSlider ? 112 : 16,
               right: 16,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _OverlayIconButton(
                     icon: Icons.wallpaper,
-                    onTap: () => setState(() {
-                      _cropMode = true;
-                      _panOffset = 0.0;
-                      _overlayVisible = false;
-                    }),
+                    onTap: () {
+                      if (showSlider) {
+                        setState(() => _cropMode = true);
+                      } else {
+                        _applyCrop(context, displaySize);
+                      }
+                    },
                   ),
                   const SizedBox(width: 8),
                   _OverlayIconButton(
@@ -178,16 +175,15 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
               ),
             ),
 
-          // Back (top-left, hidden during crop)
-          if (!_cropMode)
-            Positioned(
-              top: 16,
-              left: 16,
-              child: _OverlayIconButton(
-                icon: Icons.arrow_back,
-                onTap: () => Navigator.of(context).pop(),
-              ),
+          // Back button (top-left)
+          Positioned(
+            top: 16,
+            left: 16,
+            child: _OverlayIconButton(
+              icon: Icons.arrow_back,
+              onTap: () => Navigator.of(context).pop(),
             ),
+          ),
         ],
       ),
     );
@@ -200,7 +196,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     if (localPath != null && File(localPath).existsSync()) {
       return Image.file(
         File(localPath),
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         width: double.infinity,
         height: double.infinity,
       );
@@ -208,7 +204,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
 
     return CachedNetworkImage(
       imageUrl: artwork.imageUrl,
-      fit: BoxFit.cover,
+      fit: BoxFit.contain,
       width: double.infinity,
       height: double.infinity,
       placeholder: (_, __) => const ColoredBox(color: Color(0xFF111111)),
@@ -217,19 +213,9 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     );
   }
 
-  void _cancelCrop() {
-    setState(() {
-      _cropMode = false;
-      _panOffset = 0.0;
-    });
-    _showOverlay();
-  }
-
-  Future<void> _applyCrop(BuildContext context) async {
+  Future<void> _applyCrop(BuildContext context, Size displaySize) async {
     final artwork = widget.artwork;
-    final screenSize = MediaQuery.of(context).size;
 
-    // Resolve local path — download if needed (cached, fast)
     String localPath;
     if (artwork.localPath != null && File(artwork.localPath!).existsSync()) {
       localPath = artwork.localPath!;
@@ -247,7 +233,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     final cropRect = calculateCropRect(
       imageNativeSize: Size(
           srcImage.width.toDouble(), srcImage.height.toDouble()),
-      screenSize: screenSize,
+      screenSize: displaySize,
       panOffset: _panOffset,
     );
 
@@ -267,18 +253,15 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     if (pngBytes == null) return;
 
     final tmp = await getTemporaryDirectory();
-    final croppedPath = '${tmp.path}/ziba_crop_${artwork.contentId}.png';
+    final croppedPath =
+        '${tmp.path}/ziba_crop_${artwork.contentId}.png';
     await File(croppedPath).writeAsBytes(pngBytes.buffer.asUint8List());
 
     final adapter = ref.read(wallpaperAdapterProvider);
     await adapter.setWallpaper(croppedPath);
 
-    if (mounted) {
-      setState(() {
-        _cropMode = false;
-        _panOffset = 0.0;
-      });
-    }
+    // Keep _panOffset — don't reset so the crop box stays in place
+    if (mounted) setState(() => _cropMode = false);
   }
 
   Future<void> _removeAndPop(BuildContext context) async {
@@ -314,7 +297,6 @@ class _DetailMetadataOverlay extends StatelessWidget {
           colors: [Colors.transparent, Color(0xBF000000)],
         ),
       ),
-      // Right padding wider to avoid overlap with SET/REMOVE buttons
       padding: const EdgeInsets.fromLTRB(16, 40, 80, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,9 +305,10 @@ class _DetailMetadataOverlay extends StatelessWidget {
           Text(
             artwork.title,
             style: const TextStyle(
-              fontFamily: 'PlayfairDisplay',
+              fontFamily: 'Georgia',
               fontSize: 22,
               color: Colors.white,
+              fontWeight: FontWeight.w300,
               height: 1.2,
             ),
             maxLines: 2,
@@ -336,7 +319,7 @@ class _DetailMetadataOverlay extends StatelessWidget {
             artwork.artistName,
             style: TextStyle(
               fontSize: 13,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
             ),
           ),
           if (artwork.completitionYear != null) ...[
@@ -345,7 +328,7 @@ class _DetailMetadataOverlay extends StatelessWidget {
               artwork.completitionYear.toString(),
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha: 0.5),
               ),
             ),
           ],
@@ -362,9 +345,13 @@ class _DetailMetadataOverlay extends StatelessWidget {
 class _DetailCropPainter extends CustomPainter {
   final double panOffset;
   final double screenAspectRatio;
+  final bool preview;
 
-  _DetailCropPainter(
-      {required this.panOffset, required this.screenAspectRatio});
+  _DetailCropPainter({
+    required this.panOffset,
+    required this.screenAspectRatio,
+    this.preview = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -372,33 +359,36 @@ class _DetailCropPainter extends CustomPainter {
         (size.height * screenAspectRatio).clamp(0.0, size.width);
     final maxLeft = size.width - boxWidth;
     final boxLeft = maxLeft * panOffset;
+    final rightStart = boxLeft + boxWidth;
 
-    final maskPaint = Paint()..color = const Color(0x80000000);
+    final dimOpacity = preview ? 0x40 : 0x80;
+    final maskPaint = Paint()
+      ..color = Color.fromARGB(dimOpacity, 0, 0, 0);
+
     if (boxLeft > 0) {
       canvas.drawRect(
           Rect.fromLTWH(0, 0, boxLeft, size.height), maskPaint);
     }
-    final rightStart = boxLeft + boxWidth;
     if (rightStart < size.width) {
       canvas.drawRect(
-        Rect.fromLTWH(
-            rightStart, 0, size.width - rightStart, size.height),
+        Rect.fromLTWH(rightStart, 0, size.width - rightStart, size.height),
         maskPaint,
       );
     }
     canvas.drawRect(
       Rect.fromLTWH(boxLeft, 0, boxWidth, size.height),
       Paint()
-        ..color = Colors.white
+        ..color = preview ? Colors.white54 : Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+        ..strokeWidth = preview ? 1.0 : 1.5,
     );
   }
 
   @override
   bool shouldRepaint(_DetailCropPainter old) =>
       old.panOffset != panOffset ||
-      old.screenAspectRatio != screenAspectRatio;
+      old.screenAspectRatio != screenAspectRatio ||
+      old.preview != preview;
 }
 
 // ══════════════════════════════════════════════════
