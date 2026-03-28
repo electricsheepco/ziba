@@ -1,7 +1,15 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../../models/artwork.dart' as model;
 import '../../state/app_state.dart';
+import '../../ui/crop_math.dart';
 import 'history_screen.dart';
 import 'favorites_screen.dart';
 import 'settings_screen.dart';
@@ -90,8 +98,7 @@ class _ArtworkView extends ConsumerWidget {
               Icon(Icons.error_outline,
                   size: 48, color: theme.colorScheme.error),
               const SizedBox(height: 16),
-              Text('Failed to load artwork',
-                  style: theme.textTheme.bodyLarge),
+              Text('Failed to load artwork', style: theme.textTheme.bodyLarge),
               const SizedBox(height: 8),
               Text(e.toString(), style: theme.textTheme.bodyMedium),
               const SizedBox(height: 24),
@@ -101,9 +108,7 @@ class _ArtworkView extends ConsumerWidget {
         ),
       ),
       data: (artwork) {
-        if (artwork == null) {
-          return _EmptyState();
-        }
+        if (artwork == null) return _EmptyState();
         return _ArtworkDisplay(artwork: artwork);
       },
     );
@@ -130,6 +135,7 @@ class _EmptyState extends ConsumerWidget {
               style: theme.textTheme.labelSmall?.copyWith(
                 letterSpacing: 6,
                 fontSize: 12,
+                fontWeight: FontWeight.w300,
               ),
             ),
             const SizedBox(height: 24),
@@ -140,9 +146,9 @@ class _EmptyState extends ConsumerWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () {
-                ref.read(currentArtworkProvider.notifier).refresh(setWallpaper: false);
-              },
+              onPressed: () => ref
+                  .read(currentArtworkProvider.notifier)
+                  .refresh(setWallpaper: false),
               icon: const Icon(Icons.auto_awesome, size: 18),
               label: const Text('GET FIRST ARTWORK'),
               style: FilledButton.styleFrom(
@@ -158,202 +164,443 @@ class _EmptyState extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════
-// Artwork display (main content)
+// Artwork display — full-bleed with right action column
 // ══════════════════════════════════════════════════
 
-class _ArtworkDisplay extends ConsumerWidget {
-  final dynamic artwork; // model.Artwork
+class _ArtworkDisplay extends ConsumerStatefulWidget {
+  final model.Artwork artwork;
 
   const _ArtworkDisplay({required this.artwork});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
+  ConsumerState<_ArtworkDisplay> createState() => _ArtworkDisplayState();
+}
 
-    return CustomScrollView(
-      slivers: [
-        // Artwork image
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 48, 16, 0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: AspectRatio(
-                aspectRatio: (artwork.width ?? 16) / (artwork.height ?? 9),
-                child: CachedNetworkImage(
-                  imageUrl: artwork.image,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: const Center(
-                      child: CircularProgressIndicator(strokeWidth: 1),
-                    ),
-                  ),
-                  errorWidget: (_, __, ___) => Container(
-                    color: theme.colorScheme.errorContainer,
-                    child: const Icon(Icons.broken_image),
-                  ),
-                ),
+class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
+  bool _overlayVisible = true;
+  Timer? _dismissTimer;
+  bool _cropMode = false;
+  double _panOffset = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _showOverlay();
+  }
+
+  @override
+  void didUpdateWidget(_ArtworkDisplay old) {
+    super.didUpdateWidget(old);
+    if (old.artwork.contentId != widget.artwork.contentId) {
+      _dismissTimer?.cancel();
+      setState(() {
+        _cropMode = false;
+        _panOffset = 0.0;
+        _overlayVisible = true;
+      });
+      _showOverlay();
+    }
+  }
+
+  @override
+  void dispose() {
+    _dismissTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showOverlay() {
+    setState(() => _overlayVisible = true);
+    _dismissTimer?.cancel();
+    _dismissTimer = Timer(const Duration(seconds: 5), _hideOverlay);
+  }
+
+  void _hideOverlay() {
+    if (mounted) setState(() => _overlayVisible = false);
+  }
+
+  void _toggleOverlay() {
+    if (_overlayVisible) {
+      _hideOverlay();
+    } else {
+      _showOverlay();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _buildImageArea(context)),
+        _buildActionColumn(context),
+      ],
+    );
+  }
+
+  Widget _buildImageArea(BuildContext context) {
+    final artwork = widget.artwork;
+    final screenSize = MediaQuery.of(context).size;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            onTap: _cropMode ? null : _toggleOverlay,
+            child: ColorFiltered(
+              colorFilter: _cropMode
+                  ? const ColorFilter.mode(
+                      Color(0x80000000), BlendMode.darken)
+                  : const ColorFilter.mode(
+                      Colors.transparent, BlendMode.multiply),
+              child: CachedNetworkImage(
+                imageUrl: artwork.image,
+                fit: BoxFit.cover,
+                placeholder: (_, __) =>
+                    const ColoredBox(color: Color(0xFF111111)),
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFF1A0000)),
               ),
             ),
           ),
-        ),
 
-        // Artwork metadata
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                Text(
-                  artwork.title,
-                  style: theme.textTheme.headlineMedium,
+          // Metadata overlay
+          if (!_cropMode)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 400),
+                opacity: _overlayVisible ? 1.0 : 0.0,
+                child: _MetadataOverlay(artwork: artwork),
+              ),
+            ),
+
+          // Crop overlay
+          if (_cropMode) ...[
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _CropPainter(
+                  panOffset: _panOffset,
+                  screenAspectRatio: screenSize.width / screenSize.height,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  artwork.artistName,
-                  style: theme.textTheme.bodyLarge,
+              ),
+            ),
+            if (needsPanSlider(
+              imageNativeSize: Size(
+                (artwork.width ?? 1).toDouble(),
+                (artwork.height ?? 1).toDouble(),
+              ),
+              screenSize: screenSize,
+            ))
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 64,
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    thumbColor: Colors.white,
+                    activeTrackColor: Colors.white70,
+                    inactiveTrackColor: Colors.white24,
+                    overlayColor: Colors.white24,
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 8),
+                    trackHeight: 2,
+                  ),
+                  child: Slider(
+                    value: _panOffset,
+                    onChanged: (v) => setState(() => _panOffset = v),
+                  ),
                 ),
-                if (artwork.yearAsString != null ||
-                    artwork.completitionYear != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      artwork.yearAsString ??
-                          artwork.completitionYear.toString(),
-                      style: theme.textTheme.bodyMedium,
+              ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 16,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: _cancelCrop,
+                    icon: const Icon(Icons.close,
+                        size: 16, color: Colors.white70),
+                    label: const Text('CANCEL',
+                        style: TextStyle(
+                            color: Colors.white70, fontSize: 11)),
+                  ),
+                  const SizedBox(width: 24),
+                  FilledButton.icon(
+                    onPressed: () => _applyCrop(context),
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('APPLY',
+                        style: TextStyle(fontSize: 11)),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 10),
                     ),
                   ),
-                const SizedBox(height: 24),
-
-                // Action buttons
-                Row(
-                  children: [
-                    // Refresh
-                    _ActionButton(
-                      icon: Icons.refresh,
-                      label: 'NEW',
-                      onTap: () {
-                        ref.read(currentArtworkProvider.notifier).refresh(setWallpaper: false);
-                      },
-                    ),
-                    const SizedBox(width: 12),
-                    // Favorite
-                    _ActionButton(
-                      icon: Icons.favorite_border,
-                      label: 'SAVE',
-                      onTap: () async {
-                        final db = ref.read(databaseProvider);
-                        await db.addFavorite(artwork.contentId);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Added to favorites'),
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 12),
-                    // Set wallpaper (manual)
-                    _ActionButton(
-                      icon: Icons.wallpaper,
-                      label: 'SET',
-                      onTap: () async {
-                        final adapter = ref.read(wallpaperAdapterProvider);
-                        if (!adapter.isSupported) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text(adapter.limitations)),
-                            );
-                          }
-                          return;
-                        }
-                        // Download + set
-                        final wikiArt = ref.read(wikiArtProvider);
-                        final path = await wikiArt.downloadImage(artwork);
-                        final success = await adapter.setWallpaper(path);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(success
-                                  ? 'Wallpaper set!'
-                                  : 'Failed to set wallpaper'),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
-      ],
+          ],
+        ],
+      ),
     );
+  }
+
+  Widget _buildActionColumn(BuildContext context) {
+    final artwork = widget.artwork;
+    final isFavAsync = ref.watch(isFavoriteProvider(artwork.contentId));
+    final isFav = isFavAsync.valueOrNull ?? false;
+
+    return SizedBox(
+      width: 64,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _ColumnIconButton(
+            icon: Icons.refresh,
+            onTap: () => ref
+                .read(currentArtworkProvider.notifier)
+                .refresh(setWallpaper: false),
+          ),
+          _ColumnIconButton(
+            icon: isFav ? Icons.favorite : Icons.favorite_border,
+            active: isFav,
+            onTap: () async {
+              final db = ref.read(databaseProvider);
+              if (isFav) {
+                await db.removeFavorite(artwork.contentId);
+              } else {
+                await db.addFavorite(artwork.contentId);
+              }
+            },
+          ),
+          _ColumnIconButton(
+            icon: Icons.wallpaper,
+            onTap: () {
+              setState(() {
+                _cropMode = true;
+                _panOffset = 0.0;
+                _overlayVisible = false;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _cancelCrop() {
+    setState(() {
+      _cropMode = false;
+      _panOffset = 0.0;
+    });
+    _showOverlay();
+  }
+
+  Future<void> _applyCrop(BuildContext context) async {
+    final artwork = widget.artwork;
+    final screenSize = MediaQuery.of(context).size;
+
+    // downloadImage returns cached path if already on disk (fast path)
+    final wikiArt = ref.read(wikiArtProvider);
+    final localPath = await wikiArt.downloadImage(artwork);
+    final bytes = await File(localPath).readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final srcImage = frame.image;
+
+    final cropRect = calculateCropRect(
+      imageNativeSize: Size(
+          srcImage.width.toDouble(), srcImage.height.toDouble()),
+      screenSize: screenSize,
+      panOffset: _panOffset,
+    );
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawImageRect(
+      srcImage,
+      cropRect,
+      Rect.fromLTWH(0, 0, cropRect.width, cropRect.height),
+      Paint(),
+    );
+    final cropped = await recorder
+        .endRecording()
+        .toImage(cropRect.width.round(), cropRect.height.round());
+    final pngBytes =
+        await cropped.toByteData(format: ui.ImageByteFormat.png);
+    if (pngBytes == null) return;
+
+    final tmp = await getTemporaryDirectory();
+    final croppedPath = '${tmp.path}/ziba_crop_${artwork.contentId}.png';
+    await File(croppedPath).writeAsBytes(pngBytes.buffer.asUint8List());
+
+    final adapter = ref.read(wallpaperAdapterProvider);
+    await adapter.setWallpaper(croppedPath);
+
+    if (mounted) {
+      setState(() {
+        _cropMode = false;
+        _panOffset = 0.0;
+      });
+    }
   }
 }
 
 // ══════════════════════════════════════════════════
-// Reusable widgets
+// Metadata overlay
 // ══════════════════════════════════════════════════
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
+class _MetadataOverlay extends StatelessWidget {
+  final model.Artwork artwork;
 
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
+  const _MetadataOverlay({required this.artwork});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withOpacity(0.1),
-          ),
-          borderRadius: BorderRadius.circular(8),
+    final year =
+        artwork.yearAsString ?? artwork.completitionYear?.toString();
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Color(0xBF000000)],
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16),
-            const SizedBox(width: 8),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 40, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            artwork.title,
+            style: const TextStyle(
+              fontFamily: 'PlayfairDisplay',
+              fontSize: 22,
+              color: Colors.white,
+              height: 1.2,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            artwork.artistName,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+          if (year != null) ...[
+            const SizedBox(height: 2),
             Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                letterSpacing: 2,
+              year,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white.withOpacity(0.5),
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
+// ══════════════════════════════════════════════════
+// Crop overlay painter
+// ══════════════════════════════════════════════════
+
+class _CropPainter extends CustomPainter {
+  final double panOffset;
+  final double screenAspectRatio;
+
+  _CropPainter({required this.panOffset, required this.screenAspectRatio});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final boxWidth =
+        (size.height * screenAspectRatio).clamp(0.0, size.width);
+    final maxLeft = size.width - boxWidth;
+    final boxLeft = maxLeft * panOffset;
+
+    final maskPaint = Paint()..color = const Color(0x80000000);
+    if (boxLeft > 0) {
+      canvas.drawRect(
+          Rect.fromLTWH(0, 0, boxLeft, size.height), maskPaint);
+    }
+    final rightStart = boxLeft + boxWidth;
+    if (rightStart < size.width) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+            rightStart, 0, size.width - rightStart, size.height),
+        maskPaint,
+      );
+    }
+    canvas.drawRect(
+      Rect.fromLTWH(boxLeft, 0, boxWidth, size.height),
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CropPainter old) =>
+      old.panOffset != panOffset ||
+      old.screenAspectRatio != screenAspectRatio;
+}
+
+// ══════════════════════════════════════════════════
+// Action column icon button
+// ══════════════════════════════════════════════════
+
+class _ColumnIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool active;
+
+  const _ColumnIconButton({
+    required this.icon,
+    required this.onTap,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: IconButton(
+        icon: Icon(icon),
+        iconSize: 22,
+        color: active ? Colors.white : Colors.white38,
+        onPressed: onTap,
+        splashRadius: 22,
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════
+// Refresh button (error state retry)
+// ══════════════════════════════════════════════════
+
 class _RefreshButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return FilledButton.icon(
-      onPressed: () {
-        ref.read(currentArtworkProvider.notifier).refresh(setWallpaper: false);
-      },
+      onPressed: () => ref
+          .read(currentArtworkProvider.notifier)
+          .refresh(setWallpaper: false),
       icon: const Icon(Icons.refresh, size: 18),
       label: const Text('TRY AGAIN'),
     );
