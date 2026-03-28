@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:path_provider/path_provider.dart';
@@ -23,6 +24,13 @@ class ArtworkDetailScreen extends ConsumerStatefulWidget {
 class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
   bool _cropMode = false;
   double _panOffset = 0.0;
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +51,18 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
       screenSize: displaySize,
     );
 
-    return Scaffold(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.escape) {
+          Navigator.of(context).pop();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
@@ -186,6 +205,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
           ),
         ],
       ),
+    ),  // Focus
     );
   }
 
