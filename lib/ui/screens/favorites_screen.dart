@@ -89,40 +89,67 @@ class _FavoriteCard extends StatelessWidget {
           builder: (_) => ArtworkDetailScreen(artwork: artwork),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: CachedNetworkImage(
-                imageUrl: artwork.imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                placeholder: (_, __) => Container(
-                  color: theme.colorScheme.surfaceContainerHighest,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CachedNetworkImage(
+              imageUrl: artwork.imageUrl,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                color: theme.colorScheme.surfaceContainerHighest,
+              ),
+              errorWidget: (_, __, ___) => Container(
+                color: theme.colorScheme.errorContainer,
+                child: const Icon(Icons.broken_image, size: 20),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Color(0xCC000000)],
+                  ),
                 ),
-                errorWidget: (_, __, ___) => Container(
-                  color: theme.colorScheme.errorContainer,
-                  child: const Icon(Icons.broken_image, size: 20),
+                padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      artwork.title,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.white,
+                        fontFamily: 'Georgia',
+                        fontWeight: FontWeight.w300,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      artwork.artistName,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            artwork.title,
-            style: theme.textTheme.bodyMedium?.copyWith(fontSize: 11),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            artwork.artistName,
-            style: theme.textTheme.labelSmall,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
