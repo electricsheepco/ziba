@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,10 +22,30 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentIndex = ref.watch(activeTabProvider);
-    return Scaffold(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.escape &&
+            currentIndex != 0) {
+          ref.read(activeTabProvider.notifier).state = 0;
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
       body: IndexedStack(
         index: currentIndex,
         children: const [
@@ -61,6 +82,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    ),  // Focus
     );
   }
 }
