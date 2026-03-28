@@ -297,6 +297,19 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       ),
                     ),
 
+                  // Crop zone preview — shows which region will become wallpaper
+                  if (showSlider && !_cropMode)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _CropPainter(
+                          panOffset: _panOffset,
+                          screenAspectRatio:
+                              screenSize.width / screenSize.height,
+                          preview: true,
+                        ),
+                      ),
+                    ),
+
                   // Crop overlay
                   if (_cropMode) ...[
                     Positioned.fill(
@@ -370,24 +383,13 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
             ),
           ),
 
-        // Metadata + actions
+        // Actions + extra metadata chips
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 16),
-                Text(artwork.title,
-                    style: theme.textTheme.headlineMedium),
-                const SizedBox(height: 8),
-                Text(artwork.artistName,
-                    style: theme.textTheme.bodyLarge),
-                if (year != null) ...[
-                  const SizedBox(height: 4),
-                  Text(year, style: theme.textTheme.bodyMedium),
-                ],
-                const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
@@ -400,7 +402,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       _MetaChip(label: artwork.technique!),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     _ActionButton(
@@ -520,8 +522,14 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
 class _CropPainter extends CustomPainter {
   final double panOffset;
   final double screenAspectRatio;
+  // preview = true draws a light outline only; false = full dark mask + outline
+  final bool preview;
 
-  _CropPainter({required this.panOffset, required this.screenAspectRatio});
+  _CropPainter({
+    required this.panOffset,
+    required this.screenAspectRatio,
+    this.preview = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -530,11 +538,12 @@ class _CropPainter extends CustomPainter {
     final maxLeft = size.width - boxWidth;
     final boxLeft = maxLeft * panOffset;
 
-    final maskPaint = Paint()..color = const Color(0x80000000);
-    if (boxLeft > 0) {
-      canvas.drawRect(
-          Rect.fromLTWH(0, 0, boxLeft, size.height), maskPaint);
-    }
+    if (!preview) {
+      final maskPaint = Paint()..color = const Color(0x80000000);
+      if (boxLeft > 0) {
+        canvas.drawRect(
+            Rect.fromLTWH(0, 0, boxLeft, size.height), maskPaint);
+      }
     final rightStart = boxLeft + boxWidth;
     if (rightStart < size.width) {
       canvas.drawRect(
@@ -543,19 +552,40 @@ class _CropPainter extends CustomPainter {
         maskPaint,
       );
     }
+    } // end !preview mask
+
+    final rightStart = boxLeft + boxWidth;
+
+    // Crop box outline — solid in crop mode, subtle in preview
     canvas.drawRect(
       Rect.fromLTWH(boxLeft, 0, boxWidth, size.height),
       Paint()
-        ..color = Colors.white
+        ..color = preview ? Colors.white54 : Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+        ..strokeWidth = preview ? 1.0 : 1.5,
     );
+
+    // Preview: dim the areas outside the crop box subtly
+    if (preview) {
+      final dimPaint = Paint()..color = const Color(0x40000000);
+      if (boxLeft > 0) {
+        canvas.drawRect(
+            Rect.fromLTWH(0, 0, boxLeft, size.height), dimPaint);
+      }
+      if (rightStart < size.width) {
+        canvas.drawRect(
+          Rect.fromLTWH(rightStart, 0, size.width - rightStart, size.height),
+          dimPaint,
+        );
+      }
+    }
   }
 
   @override
   bool shouldRepaint(_CropPainter old) =>
       old.panOffset != panOffset ||
-      old.screenAspectRatio != screenAspectRatio;
+      old.screenAspectRatio != screenAspectRatio ||
+      old.preview != preview;
 }
 
 // ══════════════════════════════════════════════════
