@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../models/artwork.dart' as model;
 import '../../state/app_state.dart';
+import '../../data/database.dart' show Artwork;
 import '../../ui/crop_math.dart';
 import 'history_screen.dart';
 import 'favorites_screen.dart';
@@ -21,13 +22,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int _currentIndex = 0;
-
   @override
   Widget build(BuildContext context) {
+    final currentIndex = ref.watch(activeTabProvider);
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
+        index: currentIndex,
         children: const [
           _ArtworkView(),
           HistoryScreen(),
@@ -36,8 +36,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
+        selectedIndex: currentIndex,
+        onDestinationSelected: (i) =>
+            ref.read(activeTabProvider.notifier).state = i,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.palette_outlined),
@@ -198,12 +199,19 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     final isFavAsync = ref.watch(isFavoriteProvider(artwork.contentId));
     final isFav = isFavAsync.valueOrNull ?? false;
     final year = artwork.yearAsString ?? artwork.completitionYear?.toString();
+    // Use actual display resolution so the slider only appears for images
+    // that are genuinely wider than the user's monitor(s).
+    final display = ui.PlatformDispatcher.instance.displays.firstOrNull;
+    final displaySize = display != null
+        ? Size(display.size.width / display.devicePixelRatio,
+               display.size.height / display.devicePixelRatio)
+        : screenSize;
     final showSlider = needsPanSlider(
       imageNativeSize: Size(
         (artwork.width ?? 1).toDouble(),
         (artwork.height ?? 1).toDouble(),
       ),
-      screenSize: screenSize,
+      screenSize: displaySize,
     );
 
     return CustomScrollView(
@@ -298,87 +306,105 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                     ),
 
                   // Crop zone preview — shows which region will become wallpaper
-                  if (showSlider && !_cropMode)
+                  if (showSlider)
                     Positioned.fill(
                       child: CustomPaint(
                         painter: _CropPainter(
                           panOffset: _panOffset,
                           screenAspectRatio:
-                              screenSize.width / screenSize.height,
-                          preview: true,
+                              displaySize.width / displaySize.height,
+                          preview: !_cropMode,
                         ),
                       ),
                     ),
 
-                  // Crop overlay
-                  if (_cropMode) ...[
+                  // Crop mode: dark tint to signal "selecting crop"
+                  if (_cropMode)
                     Positioned.fill(
                       child: CustomPaint(
                         painter: _CropPainter(
                           panOffset: _panOffset,
                           screenAspectRatio:
-                              screenSize.width / screenSize.height,
+                              displaySize.width / displaySize.height,
                         ),
                       ),
                     ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 16,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          TextButton.icon(
-                            onPressed: _cancelCrop,
-                            icon: const Icon(Icons.close,
-                                size: 16, color: Colors.white70),
-                            label: const Text('CANCEL',
-                                style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 11)),
-                          ),
-                          const SizedBox(width: 24),
-                          FilledButton.icon(
-                            onPressed: () => _applyCrop(context),
-                            icon: const Icon(Icons.check, size: 16),
-                            label: const Text('APPLY',
-                                style: TextStyle(fontSize: 11)),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 10),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
           ),
         ),
 
-        // Pan slider — shown below image for wide artworks
+        // Wallpaper crop selector — only for wide artworks
         if (showSlider)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  thumbColor: Colors.white,
-                  activeTrackColor: Colors.white70,
-                  inactiveTrackColor: Colors.white24,
-                  overlayColor: Colors.white24,
-                  thumbShape:
-                      const RoundSliderThumbShape(enabledThumbRadius: 8),
-                  trackHeight: 2,
-                ),
-                child: Slider(
-                  value: _panOffset,
-                  onChanged: (v) => setState(() => _panOffset = v),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.crop, size: 12,
+                          color: Color(0xFF6B8EC4)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'WALLPAPER CROP',
+                        style: TextStyle(
+                          fontSize: 10,
+                          letterSpacing: 1.5,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      thumbColor: const Color(0xFF6B8EC4),
+                      activeTrackColor: const Color(0xFF6B8EC4),
+                      inactiveTrackColor:
+                          const Color(0xFF6B8EC4).withValues(alpha: 0.2),
+                      overlayColor:
+                          const Color(0xFF6B8EC4).withValues(alpha: 0.15),
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      trackHeight: 2,
+                    ),
+                    child: Slider(
+                      value: _panOffset,
+                      onChanged: (v) => setState(() => _panOffset = v),
+                    ),
+                  ),
+                  if (_cropMode)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          TextButton.icon(
+                            onPressed: _cancelCrop,
+                            icon: const Icon(Icons.close, size: 14),
+                            label: const Text('CANCEL',
+                                style: TextStyle(fontSize: 11)),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton.icon(
+                            onPressed: () => _applyCrop(context),
+                            icon: const Icon(Icons.wallpaper, size: 14),
+                            label: const Text('SET AS WALLPAPER',
+                                style: TextStyle(fontSize: 11)),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF6B8EC4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -432,10 +458,15 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                     _ActionButton(
                       icon: Icons.wallpaper,
                       label: 'SET WALLPAPER',
-                      onTap: () => setState(() {
-                        _cropMode = true;
-                        _panOffset = 0.0;
-                      }),
+                      onTap: () {
+                        if (showSlider) {
+                          // Wide image — show crop selector
+                          setState(() => _cropMode = true);
+                        } else {
+                          // Fits screen — set directly
+                          _applyCrop(context);
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -506,10 +537,8 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     await adapter.setWallpaper(croppedPath);
 
     if (mounted) {
-      setState(() {
-        _cropMode = false;
-        _panOffset = 0.0;
-      });
+      // Keep _panOffset so the crop box stays where the user placed it
+      setState(() => _cropMode = false);
     }
   }
 }

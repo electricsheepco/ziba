@@ -6,6 +6,9 @@ import '../data/database.dart';
 import '../platform/wallpaper_adapter.dart';
 import '../models/artwork.dart' as model;
 
+// Active bottom-nav tab — allows any screen to switch tabs.
+final activeTabProvider = StateProvider<int>((ref) => 0);
+
 // ──────────────────────────────────────────────
 // Singletons
 // ──────────────────────────────────────────────
@@ -31,6 +34,20 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
     // On startup, load the most recent from history
     // or fetch a new one
     return null;
+  }
+
+  /// Load an artwork directly from a DB row (e.g. tapped from History).
+  void loadFromHistory(Artwork row) {
+    state = AsyncData(model.Artwork(
+      contentId: row.contentId,
+      title: row.title,
+      artistName: row.artistName,
+      image: row.imageUrl,
+      width: row.width,
+      height: row.height,
+      genre: row.genre,
+      style: row.style,
+    ));
   }
 
   /// Fetch a new random artwork and optionally set as wallpaper.

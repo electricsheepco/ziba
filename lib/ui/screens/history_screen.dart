@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../data/database.dart';
 import '../../state/app_state.dart';
 
 class HistoryScreen extends ConsumerWidget {
@@ -31,8 +32,10 @@ class HistoryScreen extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.history, size: 48,
-                          color: theme.colorScheme.onSurface.withOpacity(0.2)),
+                      Icon(Icons.history,
+                          size: 48,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.2)),
                       const SizedBox(height: 16),
                       Text('No history yet',
                           style: theme.textTheme.bodyMedium),
@@ -48,7 +51,8 @@ class HistoryScreen extends ConsumerWidget {
             return SliverPadding(
               padding: const EdgeInsets.all(16),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                gridDelegate:
+                    const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 200,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
@@ -58,10 +62,13 @@ class HistoryScreen extends ConsumerWidget {
                   (context, index) {
                     final item = items[index];
                     return _HistoryCard(
-                      imageUrl: item.artwork.imageUrl,
-                      title: item.artwork.title,
-                      artist: item.artwork.artistName,
-                      setAt: item.history.setAt,
+                      item: item,
+                      onTap: () {
+                        ref
+                            .read(currentArtworkProvider.notifier)
+                            .loadFromHistory(item.artwork);
+                        ref.read(activeTabProvider.notifier).state = 0;
+                      },
                     );
                   },
                   childCount: items.length,
@@ -76,32 +83,26 @@ class HistoryScreen extends ConsumerWidget {
 }
 
 class _HistoryCard extends StatelessWidget {
-  final String imageUrl;
-  final String title;
-  final String artist;
-  final DateTime setAt;
+  final WallpaperHistoryWithArtwork item;
+  final VoidCallback onTap;
 
-  const _HistoryCard({
-    required this.imageUrl,
-    required this.title,
-    required this.artist,
-    required this.setAt,
-  });
+  const _HistoryCard({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final artwork = item.artwork;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CachedNetworkImage(
+              imageUrl: artwork.imageUrl,
               fit: BoxFit.cover,
-              width: double.infinity,
               placeholder: (_, __) => Container(
                 color: theme.colorScheme.surfaceContainerHighest,
               ),
@@ -110,22 +111,65 @@ class _HistoryCard extends StatelessWidget {
                 child: const Icon(Icons.broken_image, size: 20),
               ),
             ),
-          ),
+            // Metadata overlay
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Color(0xCC000000)],
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (artwork.style != null)
+                      Text(
+                        artwork.style!.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 7,
+                          color: Color(0xFF6B8EC4),
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    Text(
+                      artwork.title,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.white,
+                        fontFamily: 'Georgia',
+                        fontWeight: FontWeight.w300,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      artwork.artistName,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          title,
-          style: theme.textTheme.bodyMedium?.copyWith(fontSize: 11),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        Text(
-          artist,
-          style: theme.textTheme.labelSmall,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+      ),
     );
   }
 }
