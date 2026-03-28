@@ -14,9 +14,9 @@ class HistoryScreen extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        SliverAppBar(
+        const SliverAppBar(
           pinned: true,
-          title: const Text('HISTORY'),
+          title: Text('HISTORY'),
         ),
         historyAsync.when(
           loading: () => const SliverFillRemaining(
@@ -82,35 +82,52 @@ class HistoryScreen extends ConsumerWidget {
   }
 }
 
-class _HistoryCard extends StatelessWidget {
+class _HistoryCard extends StatefulWidget {
   final WallpaperHistoryWithArtwork item;
   final VoidCallback onTap;
 
   const _HistoryCard({required this.item, required this.onTap});
 
   @override
+  State<_HistoryCard> createState() => _HistoryCardState();
+}
+
+class _HistoryCardState extends State<_HistoryCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final artwork = item.artwork;
+    final artwork = widget.item.artwork;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedNetworkImage(
-              imageUrl: artwork.imageUrl,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(
-                color: theme.colorScheme.surfaceContainerHighest,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedNetworkImage(
+                imageUrl: artwork.imageUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                ),
+                errorWidget: (_, __, ___) => Container(
+                  color: theme.colorScheme.errorContainer,
+                  child: const Icon(Icons.broken_image, size: 20),
+                ),
               ),
-              errorWidget: (_, __, ___) => Container(
-                color: theme.colorScheme.errorContainer,
-                child: const Icon(Icons.broken_image, size: 20),
+              // Hover veil
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                color: _hovered
+                    ? Colors.black.withValues(alpha: 0.25)
+                    : Colors.transparent,
               ),
-            ),
             // Metadata overlay
             Positioned(
               left: 0,
@@ -167,9 +184,11 @@ class _HistoryCard extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
+

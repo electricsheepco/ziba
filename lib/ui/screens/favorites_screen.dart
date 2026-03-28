@@ -36,7 +36,7 @@ class FavoritesScreen extends ConsumerWidget {
                     children: [
                       Icon(Icons.favorite_outline,
                           size: 48,
-                          color: theme.colorScheme.onSurface.withOpacity(0.2)),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.2)),
                       const SizedBox(height: 16),
                       Text('No favorites yet',
                           style: theme.textTheme.bodyMedium),
@@ -74,81 +74,99 @@ class FavoritesScreen extends ConsumerWidget {
   }
 }
 
-class _FavoriteCard extends StatelessWidget {
+class _FavoriteCard extends StatefulWidget {
   final ArtworkData artwork;
 
   const _FavoriteCard({required this.artwork});
 
   @override
+  State<_FavoriteCard> createState() => _FavoriteCardState();
+}
+
+class _FavoriteCardState extends State<_FavoriteCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ArtworkDetailScreen(artwork: artwork),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ArtworkDetailScreen(artwork: widget.artwork),
+          ),
         ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedNetworkImage(
-              imageUrl: artwork.imageUrl,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(
-                color: theme.colorScheme.surfaceContainerHighest,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedNetworkImage(
+                imageUrl: widget.artwork.imageUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                ),
+                errorWidget: (_, __, ___) => Container(
+                  color: theme.colorScheme.errorContainer,
+                  child: const Icon(Icons.broken_image, size: 20),
+                ),
               ),
-              errorWidget: (_, __, ___) => Container(
-                color: theme.colorScheme.errorContainer,
-                child: const Icon(Icons.broken_image, size: 20),
+              // Hover veil
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                color: _hovered
+                    ? Colors.black.withValues(alpha: 0.25)
+                    : Colors.transparent,
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Color(0xCC000000)],
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Color(0xCC000000)],
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.artwork.title,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white,
+                          fontFamily: 'Georgia',
+                          fontWeight: FontWeight.w300,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.artwork.artistName,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      artwork.title,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white,
-                        fontFamily: 'Georgia',
-                        fontWeight: FontWeight.w300,
-                        height: 1.2,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      artwork.artistName,
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
