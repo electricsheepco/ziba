@@ -141,7 +141,7 @@ class _EmptyState extends ConsumerWidget {
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () {
-                ref.read(currentArtworkProvider.notifier).refresh();
+                ref.read(currentArtworkProvider.notifier).refresh(setWallpaper: false);
               },
               icon: const Icon(Icons.auto_awesome, size: 18),
               label: const Text('GET FIRST ARTWORK'),
@@ -237,7 +237,7 @@ class _ArtworkDisplay extends ConsumerWidget {
                       icon: Icons.refresh,
                       label: 'NEW',
                       onTap: () {
-                        ref.read(currentArtworkProvider.notifier).refresh();
+                        ref.read(currentArtworkProvider.notifier).refresh(setWallpaper: false);
                       },
                     ),
                     const SizedBox(width: 12),
@@ -352,7 +352,7 @@ class _RefreshButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return FilledButton.icon(
       onPressed: () {
-        ref.read(currentArtworkProvider.notifier).refresh();
+        ref.read(currentArtworkProvider.notifier).refresh(setWallpaper: false);
       },
       icon: const Icon(Icons.refresh, size: 18),
       label: const Text('TRY AGAIN'),
