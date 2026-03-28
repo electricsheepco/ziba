@@ -178,8 +178,10 @@ class _ArtworkDisplay extends ConsumerStatefulWidget {
 class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
   bool _cropMode = false;
   double _panOffset = 0.0;
-  // 0.0 = no dim, 1.0 = fully black. null = slider hidden
+  // null = slider hidden; 0.0–1.0 = dim amount
   double? _dimLevel;
+  // null = slider hidden; -1.0 (cool) to +1.0 (warm)
+  double? _toneLevel;
 
   @override
   void didUpdateWidget(_ArtworkDisplay old) {
@@ -189,8 +191,19 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
         _cropMode = false;
         _panOffset = 0.0;
         _dimLevel = null;
+        _toneLevel = null;
       });
     }
+  }
+
+  /// Returns the colour to overlay for the current tone level, used both
+  /// for the live preview on the card and for baking into the wallpaper.
+  Color _toneColor(double t) {
+    if (t == 0) return Colors.transparent;
+    final opacity = t.abs() * 0.28; // max ~28 % tint
+    return t > 0
+        ? const Color(0xFFFF9933).withValues(alpha: opacity) // warm amber
+        : const Color(0xFF6699FF).withValues(alpha: opacity); // cool blue
   }
 
   @override
@@ -242,6 +255,26 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       child: const Icon(Icons.broken_image),
                     ),
                   ),
+                  // Dim preview
+                  if (_dimLevel != null && _dimLevel! > 0)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 80),
+                          color: Colors.black.withValues(alpha: _dimLevel!),
+                        ),
+                      ),
+                    ),
+                  // Tone preview
+                  if (_toneLevel != null && _toneLevel != 0)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 80),
+                          color: _toneColor(_toneLevel!),
+                        ),
+                      ),
+                    ),
                   // Metadata overlay
                   if (!_cropMode)
                     Positioned(
@@ -404,6 +437,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                 ],
               ),
               const SizedBox(height: 12),
+              // GET / DIM / TONE / SAVE / SET
               Row(
                 children: [
                   _ActionButton(
@@ -415,15 +449,21 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                   ),
                   const SizedBox(width: 10),
                   _ActionButton(
-                    icon: Icons.wallpaper,
-                    label: 'SET',
-                    onTap: () {
-                      if (showSlider) {
-                        setState(() => _cropMode = true);
-                      } else {
-                        _applyCrop(context);
-                      }
-                    },
+                    icon: Icons.brightness_medium_outlined,
+                    label: 'DIM',
+                    active: _dimLevel != null,
+                    onTap: () => setState(() {
+                      _dimLevel = _dimLevel == null ? 0.3 : null;
+                    }),
+                  ),
+                  const SizedBox(width: 10),
+                  _ActionButton(
+                    icon: Icons.thermostat_outlined,
+                    label: 'TONE',
+                    active: _toneLevel != null,
+                    onTap: () => setState(() {
+                      _toneLevel = _toneLevel == null ? 0.0 : null;
+                    }),
                   ),
                   const SizedBox(width: 10),
                   _ActionButton(
@@ -441,63 +481,45 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                   ),
                   const SizedBox(width: 10),
                   _ActionButton(
-                    icon: Icons.brightness_medium_outlined,
-                    label: 'DIM',
-                    active: _dimLevel != null && _dimLevel! > 0,
-                    onTap: () => setState(() {
-                      _dimLevel = _dimLevel == null ? 0.3 : null;
-                    }),
+                    icon: Icons.wallpaper,
+                    label: 'SET',
+                    onTap: () {
+                      if (showSlider) {
+                        setState(() => _cropMode = true);
+                      } else {
+                        _applyCrop(context);
+                      }
+                    },
                   ),
                 ],
               ),
 
-              // Dim slider — shown when DIM is toggled on
+              // Dim slider
               if (_dimLevel != null) ...[
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.brightness_medium_outlined,
-                        size: 12, color: Color(0xFF6B8EC4)),
-                    const SizedBox(width: 6),
-                    Text(
-                      'DIM',
-                      style: TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 1.5,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5),
-                      ),
-                    ),
-                    Expanded(
-                      child: SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          thumbColor: const Color(0xFF6B8EC4),
-                          activeTrackColor: const Color(0xFF6B8EC4),
-                          inactiveTrackColor:
-                              const Color(0xFF6B8EC4).withValues(alpha: 0.2),
-                          overlayColor:
-                              const Color(0xFF6B8EC4).withValues(alpha: 0.15),
-                          thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 7),
-                          trackHeight: 2,
-                        ),
-                        child: Slider(
-                          value: _dimLevel ?? 0,
-                          onChanged: (v) => setState(() => _dimLevel = v),
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _applyCrop(context),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF6B8EC4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        textStyle: const TextStyle(fontSize: 11),
-                      ),
-                      child: const Text('APPLY'),
-                    ),
-                  ],
+                _FilterSliderRow(
+                  icon: Icons.brightness_medium_outlined,
+                  label: 'DIM',
+                  value: _dimLevel!,
+                  min: 0,
+                  max: 1,
+                  onChanged: (v) => setState(() => _dimLevel = v),
+                  theme: theme,
+                ),
+              ],
+
+              // Tone slider — cool (-1) to warm (+1)
+              if (_toneLevel != null) ...[
+                const SizedBox(height: 8),
+                _FilterSliderRow(
+                  icon: Icons.thermostat_outlined,
+                  label: 'COOL',
+                  trailingLabel: 'WARM',
+                  value: _toneLevel!,
+                  min: -1,
+                  max: 1,
+                  onChanged: (v) => setState(() => _toneLevel = v),
+                  theme: theme,
                 ),
               ],
             ],
@@ -546,14 +568,18 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     final canvas = Canvas(recorder);
     final destRect = Rect.fromLTWH(0, 0, cropRect.width, cropRect.height);
     canvas.drawImageRect(srcImage, cropRect, destRect, Paint());
-    // Apply dim overlay if requested
+    // Bake dim
     final dim = _dimLevel ?? 0;
     if (dim > 0) {
       canvas.drawRect(
         destRect,
-        Paint()
-          ..color = Color.fromARGB((dim * 255).round(), 0, 0, 0),
+        Paint()..color = Color.fromARGB((dim * 255).round(), 0, 0, 0),
       );
+    }
+    // Bake tone
+    final tone = _toneLevel ?? 0;
+    if (tone != 0) {
+      canvas.drawRect(destRect, Paint()..color = _toneColor(tone));
     }
     final cropped = await recorder
         .endRecording()
@@ -648,6 +674,78 @@ class _CropPainter extends CustomPainter {
       old.panOffset != panOffset ||
       old.screenAspectRatio != screenAspectRatio ||
       old.preview != preview;
+}
+
+// ══════════════════════════════════════════════════
+// Shared filter slider row (DIM / TONE)
+// ══════════════════════════════════════════════════
+
+class _FilterSliderRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String? trailingLabel;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+  final ThemeData theme;
+
+  const _FilterSliderRow({
+    required this.icon,
+    required this.label,
+    this.trailingLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const labelStyle = TextStyle(
+      fontSize: 10,
+      letterSpacing: 1.5,
+    );
+    return Row(
+      children: [
+        Icon(icon, size: 12, color: const Color(0xFF6B8EC4)),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: labelStyle.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderThemeData(
+              thumbColor: const Color(0xFF6B8EC4),
+              activeTrackColor: const Color(0xFF6B8EC4),
+              inactiveTrackColor:
+                  const Color(0xFF6B8EC4).withValues(alpha: 0.2),
+              overlayColor: const Color(0xFF6B8EC4).withValues(alpha: 0.15),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              trackHeight: 2,
+            ),
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+        if (trailingLabel != null)
+          Text(
+            trailingLabel!,
+            style: labelStyle.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════
