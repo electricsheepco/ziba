@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../data/database.dart';
+import '../../models/artwork_data.dart';
 import '../../state/app_state.dart';
+import 'artwork_detail_screen.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -63,12 +65,13 @@ class HistoryScreen extends ConsumerWidget {
                     final item = items[index];
                     return _HistoryCard(
                       item: item,
-                      onTap: () {
-                        ref
-                            .read(currentArtworkProvider.notifier)
-                            .loadFromHistory(item.artwork);
-                        ref.read(activeTabProvider.notifier).state = 0;
-                      },
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ArtworkDetailScreen(
+                            artwork: ArtworkData.fromRow(item.artwork),
+                          ),
+                        ),
+                      ),
                     );
                   },
                   childCount: items.length,
