@@ -8,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../models/artwork.dart' as model;
 import '../../state/app_state.dart';
-import '../../data/database.dart' show Artwork;
 import '../../ui/crop_math.dart';
 import 'history_screen.dart';
 import 'favorites_screen.dart';
@@ -179,6 +178,8 @@ class _ArtworkDisplay extends ConsumerStatefulWidget {
 class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
   bool _cropMode = false;
   double _panOffset = 0.0;
+  // 0.0 = no dim, 1.0 = fully black. null = slider hidden
+  double? _dimLevel;
 
   @override
   void didUpdateWidget(_ArtworkDisplay old) {
@@ -187,6 +188,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
       setState(() {
         _cropMode = false;
         _panOffset = 0.0;
+        _dimLevel = null;
       });
     }
   }
@@ -214,36 +216,33 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
       screenSize: displaySize,
     );
 
-    return CustomScrollView(
-      slivers: [
-        // Image card
-        SliverToBoxAdapter(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Image — expands to fill available height, no blank gap
+        Expanded(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 48, 16, 0),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  AspectRatio(
-                    aspectRatio:
-                        (artwork.width ?? 16) / (artwork.height ?? 9),
-                    child: CachedNetworkImage(
-                      imageUrl: artwork.image,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: const Center(
-                          child:
-                              CircularProgressIndicator(strokeWidth: 1),
-                        ),
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        color: theme.colorScheme.errorContainer,
-                        child: const Icon(Icons.broken_image),
+                  CachedNetworkImage(
+                    imageUrl: artwork.image,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 1),
                       ),
                     ),
+                    errorWidget: (_, __, ___) => Container(
+                      color: theme.colorScheme.errorContainer,
+                      child: const Icon(Icons.broken_image),
+                    ),
                   ),
-                  // Metadata overlay — always visible at bottom of image
+                  // Metadata overlay
                   if (!_cropMode)
                     Positioned(
                       left: 0,
@@ -254,10 +253,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Color(0xCC000000),
-                            ],
+                            colors: [Colors.transparent, Color(0xCC000000)],
                           ),
                         ),
                         padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
@@ -265,7 +261,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (artwork.style != null)
+                            if (artwork.style != null) ...[
                               Text(
                                 artwork.style!.toUpperCase(),
                                 style: const TextStyle(
@@ -275,8 +271,8 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            if (artwork.style != null)
                               const SizedBox(height: 4),
+                            ],
                             Text(
                               artwork.title,
                               style: const TextStyle(
@@ -304,8 +300,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                         ),
                       ),
                     ),
-
-                  // Crop zone preview — shows which region will become wallpaper
+                  // Crop zone painter
                   if (showSlider)
                     Positioned.fill(
                       child: CustomPaint(
@@ -317,18 +312,6 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                         ),
                       ),
                     ),
-
-                  // Crop mode: dark tint to signal "selecting crop"
-                  if (_cropMode)
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _CropPainter(
-                          panOffset: _panOffset,
-                          screenAspectRatio:
-                              displaySize.width / displaySize.height,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -337,142 +320,187 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
 
         // Wallpaper crop selector — only for wide artworks
         if (showSlider)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.crop, size: 12,
-                          color: Color(0xFF6B8EC4)),
-                      const SizedBox(width: 6),
-                      Text(
-                        'WALLPAPER CROP',
-                        style: TextStyle(
-                          fontSize: 10,
-                          letterSpacing: 1.5,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      thumbColor: const Color(0xFF6B8EC4),
-                      activeTrackColor: const Color(0xFF6B8EC4),
-                      inactiveTrackColor:
-                          const Color(0xFF6B8EC4).withValues(alpha: 0.2),
-                      overlayColor:
-                          const Color(0xFF6B8EC4).withValues(alpha: 0.15),
-                      thumbShape:
-                          const RoundSliderThumbShape(enabledThumbRadius: 7),
-                      trackHeight: 2,
-                    ),
-                    child: Slider(
-                      value: _panOffset,
-                      onChanged: (v) => setState(() => _panOffset = v),
-                    ),
-                  ),
-                  if (_cropMode)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: _cancelCrop,
-                            icon: const Icon(Icons.close, size: 14),
-                            label: const Text('CANCEL',
-                                style: TextStyle(fontSize: 11)),
-                          ),
-                          const SizedBox(width: 12),
-                          FilledButton.icon(
-                            onPressed: () => _applyCrop(context),
-                            icon: const Icon(Icons.wallpaper, size: 14),
-                            label: const Text('SET AS WALLPAPER',
-                                style: TextStyle(fontSize: 11)),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF6B8EC4),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 10),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-        // Actions + extra metadata chips
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    if (artwork.style != null)
-                      _MetaChip(label: artwork.style!),
-                    if (artwork.genre != null)
-                      _MetaChip(label: artwork.genre!),
-                    if (artwork.technique != null)
-                      _MetaChip(label: artwork.technique!),
-                  ],
-                ),
-                const SizedBox(height: 16),
                 Row(
                   children: [
-                    _ActionButton(
-                      icon: Icons.refresh,
-                      label: 'NEW',
-                      onTap: () => ref
-                          .read(currentArtworkProvider.notifier)
-                          .refresh(setWallpaper: false),
-                    ),
-                    const SizedBox(width: 12),
-                    _ActionButton(
-                      icon: isFav
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      label: 'SAVE',
-                      active: isFav,
-                      onTap: () async {
-                        final db = ref.read(databaseProvider);
-                        if (isFav) {
-                          await db.removeFavorite(artwork.contentId);
-                        } else {
-                          await db.addFavorite(artwork.contentId);
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 12),
-                    _ActionButton(
-                      icon: Icons.wallpaper,
-                      label: 'SET WALLPAPER',
-                      onTap: () {
-                        if (showSlider) {
-                          // Wide image — show crop selector
-                          setState(() => _cropMode = true);
-                        } else {
-                          // Fits screen — set directly
-                          _applyCrop(context);
-                        }
-                      },
+                    const Icon(Icons.crop, size: 12, color: Color(0xFF6B8EC4)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'WALLPAPER CROP',
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 32),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    thumbColor: const Color(0xFF6B8EC4),
+                    activeTrackColor: const Color(0xFF6B8EC4),
+                    inactiveTrackColor:
+                        const Color(0xFF6B8EC4).withValues(alpha: 0.2),
+                    overlayColor:
+                        const Color(0xFF6B8EC4).withValues(alpha: 0.15),
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 7),
+                    trackHeight: 2,
+                  ),
+                  child: Slider(
+                    value: _panOffset,
+                    onChanged: (v) => setState(() => _panOffset = v),
+                  ),
+                ),
+                if (_cropMode)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: _cancelCrop,
+                          icon: const Icon(Icons.close, size: 14),
+                          label: const Text('CANCEL',
+                              style: TextStyle(fontSize: 11)),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.icon(
+                          onPressed: () => _applyCrop(context),
+                          icon: const Icon(Icons.wallpaper, size: 14),
+                          label: const Text('SET AS WALLPAPER',
+                              style: TextStyle(fontSize: 11)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF6B8EC4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
+          ),
+
+        // Chips + action buttons — tight to bottom of image
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  if (artwork.style != null) _MetaChip(label: artwork.style!),
+                  if (artwork.genre != null) _MetaChip(label: artwork.genre!),
+                  if (artwork.technique != null)
+                    _MetaChip(label: artwork.technique!),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _ActionButton(
+                    icon: Icons.refresh,
+                    label: 'GET',
+                    onTap: () => ref
+                        .read(currentArtworkProvider.notifier)
+                        .refresh(setWallpaper: false),
+                  ),
+                  const SizedBox(width: 10),
+                  _ActionButton(
+                    icon: Icons.wallpaper,
+                    label: 'SET',
+                    onTap: () {
+                      if (showSlider) {
+                        setState(() => _cropMode = true);
+                      } else {
+                        _applyCrop(context);
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  _ActionButton(
+                    icon: isFav ? Icons.favorite : Icons.favorite_border,
+                    label: 'SAVE',
+                    active: isFav,
+                    onTap: () async {
+                      final db = ref.read(databaseProvider);
+                      if (isFav) {
+                        await db.removeFavorite(artwork.contentId);
+                      } else {
+                        await db.addFavorite(artwork.contentId);
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  _ActionButton(
+                    icon: Icons.brightness_medium_outlined,
+                    label: 'DIM',
+                    active: _dimLevel != null && _dimLevel! > 0,
+                    onTap: () => setState(() {
+                      _dimLevel = _dimLevel == null ? 0.3 : null;
+                    }),
+                  ),
+                ],
+              ),
+
+              // Dim slider — shown when DIM is toggled on
+              if (_dimLevel != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.brightness_medium_outlined,
+                        size: 12, color: Color(0xFF6B8EC4)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'DIM',
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5),
+                      ),
+                    ),
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          thumbColor: const Color(0xFF6B8EC4),
+                          activeTrackColor: const Color(0xFF6B8EC4),
+                          inactiveTrackColor:
+                              const Color(0xFF6B8EC4).withValues(alpha: 0.2),
+                          overlayColor:
+                              const Color(0xFF6B8EC4).withValues(alpha: 0.15),
+                          thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 7),
+                          trackHeight: 2,
+                        ),
+                        child: Slider(
+                          value: _dimLevel ?? 0,
+                          onChanged: (v) => setState(() => _dimLevel = v),
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _applyCrop(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF6B8EC4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        textStyle: const TextStyle(fontSize: 11),
+                      ),
+                      child: const Text('APPLY'),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
         ),
       ],
@@ -516,12 +544,17 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.drawImageRect(
-      srcImage,
-      cropRect,
-      Rect.fromLTWH(0, 0, cropRect.width, cropRect.height),
-      Paint(),
-    );
+    final destRect = Rect.fromLTWH(0, 0, cropRect.width, cropRect.height);
+    canvas.drawImageRect(srcImage, cropRect, destRect, Paint());
+    // Apply dim overlay if requested
+    final dim = _dimLevel ?? 0;
+    if (dim > 0) {
+      canvas.drawRect(
+        destRect,
+        Paint()
+          ..color = Color.fromARGB((dim * 255).round(), 0, 0, 0),
+      );
+    }
     final cropped = await recorder
         .endRecording()
         .toImage(cropRect.width.round(), cropRect.height.round());

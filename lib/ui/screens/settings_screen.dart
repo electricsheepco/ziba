@@ -15,9 +15,9 @@ class SettingsScreen extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        SliverAppBar(
+        const SliverAppBar(
           pinned: true,
-          title: const Text('SETTINGS'),
+          title: Text('SETTINGS'),
         ),
         const SliverToBoxAdapter(
           child: Padding(
@@ -38,7 +38,7 @@ class SettingsScreen extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest
-                        .withOpacity(0.3),
+                        .withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
@@ -148,16 +148,25 @@ class SettingsScreen extends ConsumerWidget {
                 // About
                 Text('ABOUT', style: theme.textTheme.labelSmall),
                 const SizedBox(height: 12),
-                Text(
-                  'Ziba v0.1.0',
-                  style: theme.textTheme.bodyLarge,
-                ),
+                Text('Ziba v0.1.0', style: theme.textTheme.bodyLarge),
                 const SizedBox(height: 4),
                 Text(
-                  'Art sourced from WikiArt.org\n'
                   'Your screen. Their masterpiece.',
                   style: theme.textTheme.bodyMedium,
                 ),
+
+                const SizedBox(height: 32),
+
+                // Credits
+                Text('CREDITS', style: theme.textTheme.labelSmall),
+                const SizedBox(height: 12),
+                const _CreditRow(label: 'Artwork', value: 'WikiArt.org'),
+                const SizedBox(height: 8),
+                const _CreditRow(label: 'Built with', value: 'Flutter'),
+                const SizedBox(height: 8),
+                const _CreditRow(
+                    label: 'Made by', value: 'Electric Sheep Supply Co.'),
+
                 const SizedBox(height: 48),
               ],
             ),
@@ -201,6 +210,32 @@ class _IntervalSelector extends StatelessWidget {
           onSelected: (_) => onChanged(opt.duration),
         );
       }).toList(),
+    );
+  }
+}
+
+class _CreditRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _CreditRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+        Text(value, style: theme.textTheme.bodyMedium),
+      ],
     );
   }
 }
