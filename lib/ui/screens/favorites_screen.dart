@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+
+import '../../models/artwork_data.dart';
 import '../../state/app_state.dart';
+import 'artwork_detail_screen.dart';
 
 class FavoritesScreen extends ConsumerWidget {
   const FavoritesScreen({super.key});
@@ -13,9 +16,9 @@ class FavoritesScreen extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        SliverAppBar(
+        const SliverAppBar(
           pinned: true,
-          title: const Text('FAVORITES'),
+          title: Text('FAVORITES'),
         ),
         favoritesAsync.when(
           loading: () => const SliverFillRemaining(
@@ -31,7 +34,8 @@ class FavoritesScreen extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.favorite_outline, size: 48,
+                      Icon(Icons.favorite_outline,
+                          size: 48,
                           color: theme.colorScheme.onSurface.withOpacity(0.2)),
                       const SizedBox(height: 16),
                       Text('No favorites yet',
@@ -56,13 +60,8 @@ class FavoritesScreen extends ConsumerWidget {
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final artwork = items[index];
-                    return _FavoriteCard(
-                      imageUrl: artwork.imageUrl,
-                      title: artwork.title,
-                      artist: artwork.artistName,
-                      contentId: artwork.contentId,
-                    );
+                    final artworkData = ArtworkData.fromRow(items[index]);
+                    return _FavoriteCard(artwork: artworkData);
                   },
                   childCount: items.length,
                 ),
@@ -75,46 +74,21 @@ class FavoritesScreen extends ConsumerWidget {
   }
 }
 
-class _FavoriteCard extends ConsumerWidget {
-  final String imageUrl;
-  final String title;
-  final String artist;
-  final int contentId;
+class _FavoriteCard extends StatelessWidget {
+  final ArtworkData artwork;
 
-  const _FavoriteCard({
-    required this.imageUrl,
-    required this.title,
-    required this.artist,
-    required this.contentId,
-  });
+  const _FavoriteCard({required this.artwork});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return GestureDetector(
-      onLongPress: () async {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Remove favorite?'),
-            content: Text('Remove "$title" from favorites?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('CANCEL'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('REMOVE'),
-              ),
-            ],
-          ),
-        );
-        if (confirm == true) {
-          ref.read(databaseProvider).removeFavorite(contentId);
-        }
-      },
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ArtworkDetailScreen(artwork: artwork),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -122,7 +96,7 @@ class _FavoriteCard extends ConsumerWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: CachedNetworkImage(
-                imageUrl: imageUrl,
+                imageUrl: artwork.imageUrl,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 placeholder: (_, __) => Container(
@@ -137,13 +111,13 @@ class _FavoriteCard extends ConsumerWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            title,
+            artwork.title,
             style: theme.textTheme.bodyMedium?.copyWith(fontSize: 11),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           Text(
-            artist,
+            artwork.artistName,
             style: theme.textTheme.labelSmall,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
