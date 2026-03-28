@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/app_state.dart';
+import '../widgets/ziba_logo.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -18,6 +19,13 @@ class SettingsScreen extends ConsumerWidget {
           pinned: true,
           title: const Text('SETTINGS'),
         ),
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.only(top: 32, bottom: 8),
+            child: Center(child: ZibaLogo(size: 48)),
+          ),
+        ),
+        const SliverToBoxAdapter(child: Divider()),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(16),
