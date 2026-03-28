@@ -455,7 +455,16 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
 
   Future<void> _applyCrop(BuildContext context) async {
     final artwork = widget.artwork;
-    final screenSize = MediaQuery.of(context).size;
+
+    // Use the actual display resolution for the crop aspect ratio, not the
+    // app window size. MediaQuery gives window size; on a Retina MacBook that
+    // might be ~660×750 (portrait), causing extreme zoom when macOS stretches
+    // the crop to fill a 2560×1600 desktop.
+    final display = ui.PlatformDispatcher.instance.displays.firstOrNull;
+    final screenSize = display != null
+        ? Size(display.size.width / display.devicePixelRatio,
+               display.size.height / display.devicePixelRatio)
+        : MediaQuery.of(context).size;
 
     // downloadImage returns cached path if already on disk (fast path)
     final wikiArt = ref.read(wikiArtProvider);
