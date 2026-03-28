@@ -664,25 +664,23 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    const padding = EdgeInsets.symmetric(horizontal: 14, vertical: 10);
+    const labelStyle = TextStyle(fontSize: 11);
+
+    if (active) {
+      return FilledButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 16),
+        label: Text(label, style: labelStyle),
+        style: FilledButton.styleFrom(padding: padding),
+      );
+    }
+
     return OutlinedButton.icon(
       onPressed: onTap,
-      icon: Icon(icon, size: 16,
-          color: active ? theme.colorScheme.primary : null),
-      label: Text(label,
-          style: TextStyle(
-              fontSize: 11,
-              color: active ? theme.colorScheme.primary : null)),
-      style: OutlinedButton.styleFrom(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        side: BorderSide(
-          color: active
-              ? theme.colorScheme.primary
-              : theme.colorScheme.outline,
-          width: 1,
-        ),
-      ),
+      icon: Icon(icon, size: 16),
+      label: Text(label, style: labelStyle),
+      style: OutlinedButton.styleFrom(padding: padding),
     );
   }
 }
