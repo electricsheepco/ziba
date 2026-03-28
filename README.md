@@ -1,17 +1,70 @@
-# ziba
+# Ziba
 
-A new Flutter project.
+> Your screen. Their masterpiece.
 
-## Getting Started
+Cross-platform art wallpaper app powered by WikiArt. Muzei-inspired, Flutter-built.
 
-This project is a starting point for a Flutter application.
+## What it does
 
-A few resources to get you started if this is your first Flutter project:
+- Downloads fine art from WikiArt's 250k+ collection
+- Sets it as your wallpaper daily (or on your schedule)
+- Works on macOS, Linux, Windows, Android (iOS: view + save)
+- Keeps a history of past wallpapers
+- Save favorites for later
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Quick Start
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+# Clone and setup
+git clone <repo>
+cd ziba
+
+# Install dependencies
+flutter pub get
+
+# Generate code (freezed, drift, json_serializable)
+dart run build_runner build --delete-conflicting-outputs
+
+# Run on your platform
+flutter run -d macos    # or linux, windows, android, ios
+```
+
+## Architecture
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for full details.
+
+```
+Flutter UI → Riverpod State → WikiArt Service → Platform Wallpaper Adapter
+                                    ↓
+                              Drift SQLite DB
+                          (history + favorites)
+```
+
+## WikiArt API
+
+The app uses WikiArt's free read-only JSON API. For higher rate limits,
+register at [wikiart.org/en/App/GetApi](https://www.wikiart.org/en/App/GetApi)
+and add your keys in Settings.
+
+## Platform Support
+
+| Platform | Wallpaper | Background Refresh | Status |
+|----------|-----------|-------------------|--------|
+| macOS    | osascript | launchd           | ✅ Ready |
+| Linux    | gsettings/feh/plasma | systemd/cron | ✅ Ready |
+| Windows  | SystemParametersInfo | Task Scheduler | ✅ Ready |
+| Android  | WallpaperManager | WorkManager    | ✅ Ready |
+| iOS      | Save to Photos | Limited (iOS restriction) | ⚠️ Partial |
+
+## Stack
+
+- Flutter 3.x + Dart 3.x
+- Riverpod (state)
+- Drift (SQLite)
+- Dio (HTTP)
+- Freezed (data classes)
+- Google Fonts (Playfair Display + JetBrains Mono)
+
+## License
+
+MIT
