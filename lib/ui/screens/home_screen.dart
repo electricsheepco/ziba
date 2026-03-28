@@ -235,6 +235,68 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       ),
                     ),
                   ),
+                  // Metadata overlay — always visible at bottom of image
+                  if (!_cropMode)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Color(0xCC000000),
+                            ],
+                          ),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (artwork.style != null)
+                              Text(
+                                artwork.style!.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF6B8EC4),
+                                  letterSpacing: 2,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            if (artwork.style != null)
+                              const SizedBox(height: 4),
+                            Text(
+                              artwork.title,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                color: Colors.white,
+                                fontFamily: 'Georgia',
+                                fontWeight: FontWeight.w300,
+                                height: 1.2,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              [
+                                artwork.artistName,
+                                if (year != null) year,
+                              ].join('  ·  '),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
                   // Crop overlay
                   if (_cropMode) ...[
                     Positioned.fill(
