@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,13 +19,13 @@ class ZibaApp extends StatelessWidget {
       title: 'Ziba',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
-      darkTheme: _buildTheme(Brightness.dark),
-      theme: _buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
+      theme: buildTheme(Brightness.light),
       home: const HomeScreen(),
     );
   }
 
-  ThemeData _buildTheme(Brightness brightness) {
+  ThemeData buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final base = isDark ? ThemeData.dark() : ThemeData.light();
 
@@ -49,16 +51,19 @@ class ZibaApp extends StatelessWidget {
         ),
         bodyLarge: GoogleFonts.jetBrainsMono(
           fontSize: 14,
+          fontFeatures: const [FontFeature('smcp')],
           color: isDark ? const Color(0xFFB0B0B0) : const Color(0xFF444444),
         ),
         bodyMedium: GoogleFonts.jetBrainsMono(
           fontSize: 12,
+          fontFeatures: const [FontFeature('smcp')],
           color: isDark ? const Color(0xFF888888) : const Color(0xFF666666),
         ),
         labelSmall: GoogleFonts.jetBrainsMono(
           fontSize: 10,
           letterSpacing: 1.5,
           fontWeight: FontWeight.w500,
+          fontFeatures: const [FontFeature('smcp')],
           color: isDark ? const Color(0xFF666666) : const Color(0xFF999999),
         ),
       ),
@@ -70,6 +75,7 @@ class ZibaApp extends StatelessWidget {
           fontSize: 14,
           fontWeight: FontWeight.w500,
           letterSpacing: 2,
+          fontFeatures: const [FontFeature('smcp')],
           color: isDark ? const Color(0xFF666666) : const Color(0xFF999999),
         ),
       ),
