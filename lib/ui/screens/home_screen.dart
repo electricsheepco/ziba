@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -177,220 +176,198 @@ class _ArtworkDisplay extends ConsumerStatefulWidget {
 }
 
 class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
-  bool _overlayVisible = true;
-  Timer? _dismissTimer;
   bool _cropMode = false;
   double _panOffset = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _showOverlay();
-  }
 
   @override
   void didUpdateWidget(_ArtworkDisplay old) {
     super.didUpdateWidget(old);
     if (old.artwork.contentId != widget.artwork.contentId) {
-      _dismissTimer?.cancel();
       setState(() {
         _cropMode = false;
         _panOffset = 0.0;
-        _overlayVisible = true;
       });
-      _showOverlay();
-    }
-  }
-
-  @override
-  void dispose() {
-    _dismissTimer?.cancel();
-    super.dispose();
-  }
-
-  void _showOverlay() {
-    setState(() => _overlayVisible = true);
-    _dismissTimer?.cancel();
-    _dismissTimer = Timer(const Duration(seconds: 5), _hideOverlay);
-  }
-
-  void _hideOverlay() {
-    if (mounted) setState(() => _overlayVisible = false);
-  }
-
-  void _toggleOverlay() {
-    if (_overlayVisible) {
-      _hideOverlay();
-    } else {
-      _showOverlay();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _buildImageArea(context)),
-        _buildActionColumn(context),
-      ],
-    );
-  }
-
-  Widget _buildImageArea(BuildContext context) {
     final artwork = widget.artwork;
+    final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
+    final isFavAsync = ref.watch(isFavoriteProvider(artwork.contentId));
+    final isFav = isFavAsync.valueOrNull ?? false;
+    final year = artwork.yearAsString ?? artwork.completitionYear?.toString();
+    final showSlider = needsPanSlider(
+      imageNativeSize: Size(
+        (artwork.width ?? 1).toDouble(),
+        (artwork.height ?? 1).toDouble(),
+      ),
+      screenSize: screenSize,
+    );
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          GestureDetector(
-            onTap: _cropMode ? null : _toggleOverlay,
-            child: ColorFiltered(
-              colorFilter: _cropMode
-                  ? const ColorFilter.mode(
-                      Color(0x80000000), BlendMode.darken)
-                  : const ColorFilter.mode(
-                      Colors.transparent, BlendMode.multiply),
-              child: CachedNetworkImage(
-                imageUrl: artwork.image,
-                fit: BoxFit.cover,
-                placeholder: (_, __) =>
-                    const ColoredBox(color: Color(0xFF111111)),
-                errorWidget: (_, __, ___) =>
-                    const ColoredBox(color: Color(0xFF1A0000)),
-              ),
-            ),
-          ),
-
-          // Metadata overlay
-          if (!_cropMode)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 400),
-                opacity: _overlayVisible ? 1.0 : 0.0,
-                child: _MetadataOverlay(artwork: artwork),
-              ),
-            ),
-
-          // Crop overlay
-          if (_cropMode) ...[
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _CropPainter(
-                  panOffset: _panOffset,
-                  screenAspectRatio: screenSize.width / screenSize.height,
-                ),
-              ),
-            ),
-            if (needsPanSlider(
-              imageNativeSize: Size(
-                (artwork.width ?? 1).toDouble(),
-                (artwork.height ?? 1).toDouble(),
-              ),
-              screenSize: screenSize,
-            ))
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 64,
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    thumbColor: Colors.white,
-                    activeTrackColor: Colors.white70,
-                    inactiveTrackColor: Colors.white24,
-                    overlayColor: Colors.white24,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 8),
-                    trackHeight: 2,
-                  ),
-                  child: Slider(
-                    value: _panOffset,
-                    onChanged: (v) => setState(() => _panOffset = v),
-                  ),
-                ),
-              ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 16,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+    return CustomScrollView(
+      slivers: [
+        // Image card
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 48, 16, 0),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Stack(
                 children: [
-                  TextButton.icon(
-                    onPressed: _cancelCrop,
-                    icon: const Icon(Icons.close,
-                        size: 16, color: Colors.white70),
-                    label: const Text('CANCEL',
-                        style: TextStyle(
-                            color: Colors.white70, fontSize: 11)),
-                  ),
-                  const SizedBox(width: 24),
-                  FilledButton.icon(
-                    onPressed: () => _applyCrop(context),
-                    icon: const Icon(Icons.check, size: 16),
-                    label: const Text('APPLY',
-                        style: TextStyle(fontSize: 11)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
+                  AspectRatio(
+                    aspectRatio:
+                        (artwork.width ?? 16) / (artwork.height ?? 9),
+                    child: CachedNetworkImage(
+                      imageUrl: artwork.image,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        child: const Center(
+                          child:
+                              CircularProgressIndicator(strokeWidth: 1),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: theme.colorScheme.errorContainer,
+                        child: const Icon(Icons.broken_image),
+                      ),
                     ),
                   ),
+                  // Crop overlay
+                  if (_cropMode) ...[
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _CropPainter(
+                          panOffset: _panOffset,
+                          screenAspectRatio:
+                              screenSize.width / screenSize.height,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 16,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _cancelCrop,
+                            icon: const Icon(Icons.close,
+                                size: 16, color: Colors.white70),
+                            label: const Text('CANCEL',
+                                style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11)),
+                          ),
+                          const SizedBox(width: 24),
+                          FilledButton.icon(
+                            onPressed: () => _applyCrop(context),
+                            icon: const Icon(Icons.check, size: 16),
+                            label: const Text('APPLY',
+                                style: TextStyle(fontSize: 11)),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 10),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-          ],
-        ],
-      ),
-    );
-  }
+          ),
+        ),
 
-  Widget _buildActionColumn(BuildContext context) {
-    final artwork = widget.artwork;
-    final isFavAsync = ref.watch(isFavoriteProvider(artwork.contentId));
-    final isFav = isFavAsync.valueOrNull ?? false;
+        // Pan slider — shown below image for wide artworks
+        if (showSlider)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  thumbColor: Colors.white,
+                  activeTrackColor: Colors.white70,
+                  inactiveTrackColor: Colors.white24,
+                  overlayColor: Colors.white24,
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 8),
+                  trackHeight: 2,
+                ),
+                child: Slider(
+                  value: _panOffset,
+                  onChanged: (v) => setState(() => _panOffset = v),
+                ),
+              ),
+            ),
+          ),
 
-    return SizedBox(
-      width: 64,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _ColumnIconButton(
-            icon: Icons.refresh,
-            onTap: () => ref
-                .read(currentArtworkProvider.notifier)
-                .refresh(setWallpaper: false),
+        // Metadata + actions
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                Text(artwork.title,
+                    style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 8),
+                Text(artwork.artistName,
+                    style: theme.textTheme.bodyLarge),
+                if (year != null) ...[
+                  const SizedBox(height: 4),
+                  Text(year, style: theme.textTheme.bodyMedium),
+                ],
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    _ActionButton(
+                      icon: Icons.refresh,
+                      label: 'NEW',
+                      onTap: () => ref
+                          .read(currentArtworkProvider.notifier)
+                          .refresh(setWallpaper: false),
+                    ),
+                    const SizedBox(width: 12),
+                    _ActionButton(
+                      icon: isFav
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      label: 'SAVE',
+                      active: isFav,
+                      onTap: () async {
+                        final db = ref.read(databaseProvider);
+                        if (isFav) {
+                          await db.removeFavorite(artwork.contentId);
+                        } else {
+                          await db.addFavorite(artwork.contentId);
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    _ActionButton(
+                      icon: Icons.wallpaper,
+                      label: 'SET WALLPAPER',
+                      onTap: () => setState(() {
+                        _cropMode = true;
+                        _panOffset = 0.0;
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
-          _ColumnIconButton(
-            icon: isFav ? Icons.favorite : Icons.favorite_border,
-            active: isFav,
-            onTap: () async {
-              final db = ref.read(databaseProvider);
-              if (isFav) {
-                await db.removeFavorite(artwork.contentId);
-              } else {
-                await db.addFavorite(artwork.contentId);
-              }
-            },
-          ),
-          _ColumnIconButton(
-            icon: Icons.wallpaper,
-            onTap: () {
-              setState(() {
-                _cropMode = true;
-                _panOffset = 0.0;
-                _overlayVisible = false;
-              });
-            },
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -399,7 +376,6 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
       _cropMode = false;
       _panOffset = 0.0;
     });
-    _showOverlay();
   }
 
   Future<void> _applyCrop(BuildContext context) async {
@@ -452,67 +428,6 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
   }
 }
 
-// ══════════════════════════════════════════════════
-// Metadata overlay
-// ══════════════════════════════════════════════════
-
-class _MetadataOverlay extends StatelessWidget {
-  final model.Artwork artwork;
-
-  const _MetadataOverlay({required this.artwork});
-
-  @override
-  Widget build(BuildContext context) {
-    final year =
-        artwork.yearAsString ?? artwork.completitionYear?.toString();
-
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Color(0xBF000000)],
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 40, 16, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            artwork.title,
-            style: const TextStyle(
-              fontFamily: 'PlayfairDisplay',
-              fontSize: 22,
-              color: Colors.white,
-              height: 1.2,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            artwork.artistName,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.white.withOpacity(0.8),
-            ),
-          ),
-          if (year != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              year,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.white.withOpacity(0.5),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 // ══════════════════════════════════════════════════
 // Crop overlay painter
@@ -560,31 +475,42 @@ class _CropPainter extends CustomPainter {
 }
 
 // ══════════════════════════════════════════════════
-// Action column icon button
+// Action button (row below metadata)
 // ══════════════════════════════════════════════════
 
-class _ColumnIconButton extends StatelessWidget {
+class _ActionButton extends StatelessWidget {
   final IconData icon;
+  final String label;
   final VoidCallback onTap;
   final bool active;
 
-  const _ColumnIconButton({
+  const _ActionButton({
     required this.icon,
+    required this.label,
     required this.onTap,
     this.active = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 44,
-      height: 44,
-      child: IconButton(
-        icon: Icon(icon),
-        iconSize: 22,
-        color: active ? Colors.white : Colors.white38,
-        onPressed: onTap,
-        splashRadius: 22,
+    final theme = Theme.of(context);
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16,
+          color: active ? theme.colorScheme.primary : null),
+      label: Text(label,
+          style: TextStyle(
+              fontSize: 11,
+              color: active ? theme.colorScheme.primary : null)),
+      style: OutlinedButton.styleFrom(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        side: BorderSide(
+          color: active
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline,
+          width: 1,
+        ),
       ),
     );
   }
