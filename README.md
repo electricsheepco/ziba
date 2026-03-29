@@ -4,6 +4,20 @@
 
 Cross-platform art wallpaper app powered by WikiArt. Muzei-inspired, Flutter-built.
 
+## Install (macOS)
+
+**Homebrew (recommended)**
+
+```bash
+brew install --cask electricsheepco/tap/ziba
+```
+
+**Direct download**
+
+Download `ziba.dmg` from the [latest release](https://github.com/electricsheepco/ziba/releases/latest), open it, and drag ziba to your Applications folder.
+
+Signed and notarised — no Gatekeeper warnings.
+
 ## What it does
 
 - Downloads fine art from WikiArt's 250k+ collection
