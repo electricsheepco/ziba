@@ -88,7 +88,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
           fit: StackFit.expand,
           children: [
             // Full-bleed image
-            _buildImage(),
+            _buildImage(showSlider),
 
             // Dim preview overlay
             if (_dimLevel != null && _dimLevel! > 0)
@@ -380,14 +380,19 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     );
   }
 
-  Widget _buildImage() {
+  Widget _buildImage(bool showSlider) {
     final artwork = widget.artwork;
     final localPath = artwork.localPath;
+
+    final alignment = (_cropMode || _setMode) && showSlider
+        ? Alignment(_panOffset * 2 - 1, 0)
+        : Alignment.center;
 
     if (localPath != null && File(localPath).existsSync()) {
       return Image.file(
         File(localPath),
         fit: BoxFit.contain,
+        alignment: alignment,
         width: double.infinity,
         height: double.infinity,
       );
@@ -396,6 +401,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     return CachedNetworkImage(
       imageUrl: artwork.imageUrl,
       fit: BoxFit.contain,
+      alignment: alignment,
       width: double.infinity,
       height: double.infinity,
       placeholder: (_, __) => const ColoredBox(color: Color(0xFF111111)),
@@ -456,8 +462,9 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     if (pngBytes == null) return;
 
     final tmp = await getTemporaryDirectory();
+    final ts = DateTime.now().millisecondsSinceEpoch;
     final croppedPath =
-        '${tmp.path}/ziba_crop_${artwork.contentId}.png';
+        '${tmp.path}/ziba_crop_${artwork.contentId}_$ts.png';
     await File(croppedPath).writeAsBytes(pngBytes.buffer.asUint8List());
 
     final adapter = ref.read(wallpaperAdapterProvider);

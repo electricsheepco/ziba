@@ -266,6 +266,11 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                   CachedNetworkImage(
                     imageUrl: artwork.image,
                     fit: BoxFit.cover,
+                    // Pan the image when slider is active so the user sees
+                    // which portion will be used as wallpaper.
+                    alignment: showSlider
+                        ? Alignment(_panOffset * 2 - 1, 0)
+                        : Alignment.center,
                     placeholder: (_, __) => Container(
                       color: theme.colorScheme.surfaceContainerHighest,
                       child: const Center(
@@ -355,15 +360,15 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                         ),
                       ),
                     ),
-                  // Crop zone painter
-                  if (showSlider)
+                  // Crop zone painter — only in active crop mode
+                  if (showSlider && _cropMode)
                     Positioned.fill(
                       child: CustomPaint(
                         painter: _CropPainter(
                           panOffset: _panOffset,
                           screenAspectRatio:
                               displaySize.width / displaySize.height,
-                          preview: !_cropMode,
+                          preview: false,
                         ),
                       ),
                     ),
@@ -611,7 +616,8 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     if (pngBytes == null) return;
 
     final tmp = await getTemporaryDirectory();
-    final croppedPath = '${tmp.path}/ziba_crop_${artwork.contentId}.png';
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final croppedPath = '${tmp.path}/ziba_crop_${artwork.contentId}_$ts.png';
     await File(croppedPath).writeAsBytes(pngBytes.buffer.asUint8List());
 
     final adapter = ref.read(wallpaperAdapterProvider);
