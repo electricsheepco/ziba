@@ -25,7 +25,10 @@ class FavoritesScreen extends ConsumerWidget {
             child: Center(child: CircularProgressIndicator(strokeWidth: 1)),
           ),
           error: (e, _) => SliverFillRemaining(
-            child: Center(child: Text('Error: $e')),
+            child: Center(
+              child: Text('Couldn\'t load favorites',
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ),
           ),
           data: (items) {
             if (items.isEmpty) {

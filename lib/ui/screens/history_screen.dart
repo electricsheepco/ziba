@@ -25,7 +25,10 @@ class HistoryScreen extends ConsumerWidget {
             child: Center(child: CircularProgressIndicator(strokeWidth: 1)),
           ),
           error: (e, _) => SliverFillRemaining(
-            child: Center(child: Text('Error: $e')),
+            child: Center(
+              child: Text('Couldn\'t load history',
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ),
           ),
           data: (items) {
             if (items.isEmpty) {
@@ -153,7 +156,7 @@ class _HistoryCardState extends State<_HistoryCard> {
                       Text(
                         artwork.style!.toUpperCase(),
                         style: const TextStyle(
-                          fontSize: 7,
+                          fontSize: 9,
                           color: Color(0xFF6B8EC4),
                           letterSpacing: 1.5,
                           fontWeight: FontWeight.w500,
