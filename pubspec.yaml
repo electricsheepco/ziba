@@ -1,7 +1,7 @@
 name: ziba
 description: Cross-platform art wallpaper app. Muzei-inspired, WikiArt-powered.
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.2.1+4
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
