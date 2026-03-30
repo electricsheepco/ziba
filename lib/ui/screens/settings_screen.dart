@@ -163,7 +163,7 @@ class SettingsScreen extends ConsumerWidget {
                 // About
                 Text('ABOUT', style: theme.textTheme.labelSmall),
                 const SizedBox(height: 12),
-                Text('Ziba v0.1.0', style: theme.textTheme.bodyLarge),
+                Text('Ziba v1.2.0', style: theme.textTheme.bodyLarge),
                 const SizedBox(height: 4),
                 Text(
                   'Your screen. Their masterpiece.',
