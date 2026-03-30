@@ -169,6 +169,13 @@ class SettingsScreen extends ConsumerWidget {
                   'Your screen. Their masterpiece.',
                   style: theme.textTheme.bodyMedium,
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  'زیبا — beautiful, expressive in Persian.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF6B8EC4),
+                  ),
+                ),
 
                 const SizedBox(height: 32),
 

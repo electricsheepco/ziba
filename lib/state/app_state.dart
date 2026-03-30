@@ -125,9 +125,9 @@ final favoritesProvider = StreamProvider<List<Artwork>>((ref) {
 });
 
 final isFavoriteProvider =
-    FutureProvider.family<bool, int>((ref, contentId) {
+    StreamProvider.family<bool, int>((ref, contentId) {
   final db = ref.watch(databaseProvider);
-  return db.isFavorite(contentId);
+  return db.watchIsFavorite(contentId);
 });
 
 // ──────────────────────────────────────────────

@@ -114,6 +114,12 @@ class AppDatabase extends _$AppDatabase {
     return row != null;
   }
 
+  Stream<bool> watchIsFavorite(int contentId) {
+    return (select(favorites)..where((f) => f.contentId.equals(contentId)))
+        .watch()
+        .map((rows) => rows.isNotEmpty);
+  }
+
   Stream<List<Artwork>> watchFavorites() {
     final query = select(favorites).join([
       innerJoin(artworks, artworks.contentId.equalsExp(favorites.contentId)),

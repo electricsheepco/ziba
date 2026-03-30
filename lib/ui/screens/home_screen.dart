@@ -525,7 +525,6 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       } else {
                         await db.addFavorite(artwork.contentId);
                       }
-                      ref.invalidate(isFavoriteProvider(artwork.contentId));
                     },
                   ),
                   const SizedBox(width: 10),

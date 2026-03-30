@@ -771,7 +771,6 @@ class _SaveOverlayButton extends ConsumerWidget {
         } else {
           await db.addFavorite(contentId);
         }
-        ref.invalidate(isFavoriteProvider(contentId));
       },
     );
   }
