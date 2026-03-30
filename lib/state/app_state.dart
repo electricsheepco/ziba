@@ -68,28 +68,43 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
       final isDesktop =
           Platform.isMacOS || Platform.isLinux || Platform.isWindows;
 
-      // Fetch random artwork
+      // Fetch random artwork (list index — no style/genre/technique)
       final artwork = await wikiArt.getRandomArtwork(
         preferLandscape: isDesktop,
         excludeIds: recentIds,
       );
+
+      // Enrich with detail endpoint (style, genre, technique, galleryName only).
+      // The detail endpoint scrambles artistName order — keep list data for
+      // everything except the metadata fields that only the detail provides.
+      final detail = await wikiArt
+          .getPaintingDetail(artwork.contentId)
+          .catchError((_) => null);
+      final enriched = detail == null
+          ? artwork
+          : artwork.copyWith(
+              style: detail.style,
+              genre: detail.genre,
+              technique: detail.technique,
+              galleryName: detail.galleryName,
+            );
 
       // Download image locally
       final localPath = await wikiArt.downloadImage(artwork);
 
       // Store in database
       await db.upsertArtwork(ArtworksCompanion.insert(
-        contentId: Value(artwork.contentId),
-        title: artwork.title,
-        artistName: artwork.artistName,
-        artistUrl: Value(artwork.artistUrl),
-        completitionYear: Value(artwork.completitionYear),
-        imageUrl: artwork.image,
+        contentId: Value(enriched.contentId),
+        title: enriched.title,
+        artistName: enriched.artistName,
+        artistUrl: Value(enriched.artistUrl),
+        completitionYear: Value(enriched.completitionYear),
+        imageUrl: enriched.image,
         localPath: Value(localPath),
-        width: Value(artwork.width),
-        height: Value(artwork.height),
-        genre: Value(artwork.genre),
-        style: Value(artwork.style),
+        width: Value(enriched.width),
+        height: Value(enriched.height),
+        genre: Value(enriched.genre),
+        style: Value(enriched.style),
       ));
 
       // Add to history
@@ -100,7 +115,7 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
         await adapter.setWallpaper(localPath);
       }
 
-      return artwork.copyWith(setAt: DateTime.now());
+      return enriched.copyWith(setAt: DateTime.now());
     });
   }
 }
