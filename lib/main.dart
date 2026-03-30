@@ -1,12 +1,22 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:launch_at_startup/launch_at_startup.dart';
 import 'ui/screens/home_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+    LaunchAtStartup.instance.setup(
+      appName: 'Ziba',
+      appPath: Platform.resolvedExecutable,
+    );
+  }
+
   runApp(const ProviderScope(child: ZibaApp()));
 }
 

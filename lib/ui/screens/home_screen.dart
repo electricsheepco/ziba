@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -121,7 +122,11 @@ class _ArtworkView extends ConsumerWidget {
               const SizedBox(height: 16),
               Text('Failed to load artwork', style: theme.textTheme.bodyLarge),
               const SizedBox(height: 8),
-              Text(e.toString(), style: theme.textTheme.bodyMedium),
+              Text(
+                "Couldn't reach WikiArt. Check your connection and try again.",
+                style: theme.textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 24),
               _RefreshButton(),
             ],
@@ -350,6 +355,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                               [
                                 artwork.artistName,
                                 if (year != null) year,
+                                if (artwork.style != null) artwork.style!,
                               ].join('  ·  '),
                               style: TextStyle(
                                 fontSize: 12,
@@ -400,21 +406,36 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                     ),
                   ],
                 ),
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    thumbColor: const Color(0xFF6B8EC4),
-                    activeTrackColor: const Color(0xFF6B8EC4),
-                    inactiveTrackColor:
-                        const Color(0xFF6B8EC4).withValues(alpha: 0.2),
-                    overlayColor:
-                        const Color(0xFF6B8EC4).withValues(alpha: 0.15),
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 7),
-                    trackHeight: 2,
-                  ),
-                  child: Slider(
-                    value: _panOffset,
-                    onChanged: (v) => setState(() => _panOffset = v),
+                Listener(
+                  // Trackpad two-finger horizontal scroll adjusts crop pan.
+                  onPointerSignal: (event) {
+                    if (event is PointerScrollEvent) {
+                      final dx = event.scrollDelta.dx;
+                      final dy = event.scrollDelta.dy;
+                      if (dx.abs() > dy.abs() && dx.abs() > 0) {
+                        setState(() {
+                          _panOffset =
+                              (_panOffset + dx / 600).clamp(0.0, 1.0);
+                        });
+                      }
+                    }
+                  },
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      thumbColor: const Color(0xFF6B8EC4),
+                      activeTrackColor: const Color(0xFF6B8EC4),
+                      inactiveTrackColor:
+                          const Color(0xFF6B8EC4).withValues(alpha: 0.2),
+                      overlayColor:
+                          const Color(0xFF6B8EC4).withValues(alpha: 0.15),
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      trackHeight: 2,
+                    ),
+                    child: Slider(
+                      value: _panOffset,
+                      onChanged: (v) => setState(() => _panOffset = v),
+                    ),
                   ),
                 ),
                 if (_cropMode)
@@ -504,6 +525,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       } else {
                         await db.addFavorite(artwork.contentId);
                       }
+                      ref.invalidate(isFavoriteProvider(artwork.contentId));
                     },
                   ),
                   const SizedBox(width: 10),

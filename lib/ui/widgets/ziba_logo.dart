@@ -52,11 +52,11 @@ class ZibaLogo extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // ز mark
+                // ز mark — use .SF Arabic to match the app icon glyph
                 Text(
                   'ز',
                   style: TextStyle(
-                    fontFamily: 'Georgia',
+                    fontFamily: '.SF Arabic',
                     fontSize: size,
                     fontWeight: FontWeight.w300,
                     color: markColor,

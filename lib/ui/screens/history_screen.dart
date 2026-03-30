@@ -72,6 +72,7 @@ class HistoryScreen extends ConsumerWidget {
                         MaterialPageRoute(
                           builder: (_) => ArtworkDetailScreen(
                             artwork: ArtworkData.fromRow(item.artwork),
+                            showSaveButton: true,
                           ),
                         ),
                       ),

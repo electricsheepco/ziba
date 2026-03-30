@@ -77,6 +77,21 @@ class SettingsScreen extends ConsumerWidget {
 
                 const SizedBox(height: 32),
 
+                // Startup
+                Text('STARTUP', style: theme.textTheme.labelSmall),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Launch at login',
+                      style: theme.textTheme.bodyLarge),
+                  subtitle: Text('Start Ziba automatically when you log in',
+                      style: theme.textTheme.bodyMedium),
+                  value: settings.launchAtLogin,
+                  onChanged: (v) => notifier.setLaunchAtLogin(v),
+                ),
+
+                const SizedBox(height: 32),
+
                 // Auto rotation
                 Text('ROTATION', style: theme.textTheme.labelSmall),
                 const SizedBox(height: 12),

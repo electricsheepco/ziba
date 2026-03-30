@@ -32,6 +32,9 @@ dependencies:
   # Background tasks (Android)
   workmanager: ^0.5.2
 
+  # macOS: launch at login (SMAppService on macOS 13+)
+  launch_at_startup: ^0.3.0
+
   # UI
   google_fonts: ^6.2.1
 

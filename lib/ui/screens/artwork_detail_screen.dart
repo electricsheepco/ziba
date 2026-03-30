@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,15 @@ import '../../ui/crop_math.dart';
 class ArtworkDetailScreen extends ConsumerStatefulWidget {
   final ArtworkData artwork;
 
-  const ArtworkDetailScreen({super.key, required this.artwork});
+  /// Show a heart (SAVE) overlay button alongside SET.
+  /// Pass true from History; false (default) from Saved.
+  final bool showSaveButton;
+
+  const ArtworkDetailScreen({
+    super.key,
+    required this.artwork,
+    this.showSaveButton = false,
+  });
 
   @override
   ConsumerState<ArtworkDetailScreen> createState() =>
@@ -211,7 +220,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
                 ),
               ),
 
-            // SET + REMOVE buttons (hidden during set/crop mode)
+            // Action overlay buttons (hidden during set/crop mode)
             if (!_cropMode && !_setMode)
               Positioned(
                 bottom: showSlider ? 112 : 16,
@@ -219,16 +228,14 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (widget.showSaveButton) ...[
+                      _SaveOverlayButton(contentId: widget.artwork.contentId),
+                      const SizedBox(width: 8),
+                    ],
                     _OverlayIconButton(
                       icon: Icons.wallpaper,
                       tooltip: 'Set as wallpaper',
                       onTap: () => setState(() => _setMode = true),
-                    ),
-                    const SizedBox(width: 8),
-                    _OverlayIconButton(
-                      icon: Icons.delete_outline,
-                      tooltip: 'Remove',
-                      onTap: () => _removeAndPop(context),
                     ),
                   ],
                 ),
@@ -363,19 +370,33 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
   }
 
   Widget _buildCropSlider(BuildContext context) {
-    return SliderTheme(
-      data: SliderTheme.of(context).copyWith(
-        thumbColor: const Color(0xFF6B8EC4),
-        activeTrackColor: const Color(0xFF6B8EC4),
-        inactiveTrackColor:
-            const Color(0xFF6B8EC4).withValues(alpha: 0.2),
-        overlayColor: const Color(0xFF6B8EC4).withValues(alpha: 0.15),
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-        trackHeight: 2,
-      ),
-      child: Slider(
-        value: _panOffset,
-        onChanged: (v) => setState(() => _panOffset = v),
+    return Listener(
+      // Trackpad two-finger horizontal scroll adjusts crop pan.
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          final dx = event.scrollDelta.dx;
+          final dy = event.scrollDelta.dy;
+          if (dx.abs() > dy.abs() && dx.abs() > 0) {
+            setState(() {
+              _panOffset = (_panOffset + dx / 600).clamp(0.0, 1.0);
+            });
+          }
+        }
+      },
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          thumbColor: const Color(0xFF6B8EC4),
+          activeTrackColor: const Color(0xFF6B8EC4),
+          inactiveTrackColor:
+              const Color(0xFF6B8EC4).withValues(alpha: 0.2),
+          overlayColor: const Color(0xFF6B8EC4).withValues(alpha: 0.15),
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+          trackHeight: 2,
+        ),
+        child: Slider(
+          value: _panOffset,
+          onChanged: (v) => setState(() => _panOffset = v),
+        ),
       ),
     );
   }
@@ -525,22 +546,17 @@ class _DetailMetadataOverlay extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            artwork.artistName,
+            [
+              artwork.artistName,
+              if (artwork.completitionYear != null)
+                artwork.completitionYear.toString(),
+              if (artwork.style != null) artwork.style!,
+            ].join('  ·  '),
             style: TextStyle(
-              fontSize: 13,
-              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.7),
             ),
           ),
-          if (artwork.completitionYear != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              artwork.completitionYear.toString(),
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -728,6 +744,35 @@ class _PanelButtonState extends State<_PanelButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════
+// Save overlay button (heart toggle, used from History)
+// ══════════════════════════════════════════════════
+
+class _SaveOverlayButton extends ConsumerWidget {
+  final int contentId;
+  const _SaveOverlayButton({required this.contentId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isFavAsync = ref.watch(isFavoriteProvider(contentId));
+    final isFav = isFavAsync.valueOrNull ?? false;
+
+    return _OverlayIconButton(
+      icon: isFav ? Icons.favorite : Icons.favorite_border,
+      tooltip: isFav ? 'Remove from saved' : 'Save',
+      onTap: () async {
+        final db = ref.read(databaseProvider);
+        if (isFav) {
+          await db.removeFavorite(contentId);
+        } else {
+          await db.addFavorite(contentId);
+        }
+        ref.invalidate(isFavoriteProvider(contentId));
+      },
     );
   }
 }
