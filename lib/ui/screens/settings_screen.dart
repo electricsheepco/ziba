@@ -132,6 +132,16 @@ class SettingsScreen extends ConsumerWidget {
 
                 const SizedBox(height: 32),
 
+                // Appearance
+                Text('APPEARANCE', style: theme.textTheme.labelSmall),
+                const SizedBox(height: 12),
+                _ThemeModeSelector(
+                  current: settings.themeMode,
+                  onChanged: notifier.setThemeMode,
+                ),
+
+                const SizedBox(height: 32),
+
                 // Art movements filter
                 Text('ART MOVEMENTS', style: theme.textTheme.labelSmall),
                 const SizedBox(height: 8),
@@ -258,6 +268,38 @@ class _CreditRow extends StatelessWidget {
         ),
         Text(value, style: theme.textTheme.bodyMedium),
       ],
+    );
+  }
+}
+
+class _ThemeModeSelector extends StatelessWidget {
+  final ThemeMode current;
+  final ValueChanged<ThemeMode> onChanged;
+
+  const _ThemeModeSelector({
+    required this.current,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final options = [
+      (label: 'Dark', mode: ThemeMode.dark),
+      (label: 'Light', mode: ThemeMode.light),
+      (label: 'System', mode: ThemeMode.system),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      children: options.map((opt) {
+        return ChoiceChip(
+          label: Text(opt.label,
+              style: theme.textTheme.bodyMedium?.copyWith(fontSize: 11)),
+          selected: current == opt.mode,
+          onSelected: (_) => onChanged(opt.mode),
+        );
+      }).toList(),
     );
   }
 }

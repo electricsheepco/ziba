@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
+import 'state/app_state.dart';
 import 'ui/screens/home_screen.dart';
 
 void main() async {
@@ -20,15 +21,16 @@ void main() async {
   runApp(const ProviderScope(child: ZibaApp()));
 }
 
-class ZibaApp extends StatelessWidget {
+class ZibaApp extends ConsumerWidget {
   const ZibaApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(settingsProvider.select((s) => s.themeMode));
     return MaterialApp(
       title: 'Ziba',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       darkTheme: buildTheme(Brightness.dark),
       theme: buildTheme(Brightness.light),
       home: const HomeScreen(),

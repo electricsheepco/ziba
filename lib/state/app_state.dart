@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -156,6 +157,7 @@ class AppSettings {
   final bool autoRotate;
   final Set<String> artMovementFilter; // empty = all
   final bool launchAtLogin;
+  final ThemeMode themeMode;
 
   const AppSettings({
     this.rotationInterval = const Duration(hours: 24),
@@ -163,6 +165,7 @@ class AppSettings {
     this.autoRotate = true,
     this.artMovementFilter = const {},
     this.launchAtLogin = false,
+    this.themeMode = ThemeMode.dark,
   });
 
   AppSettings copyWith({
@@ -171,6 +174,7 @@ class AppSettings {
     bool? autoRotate,
     Set<String>? artMovementFilter,
     bool? launchAtLogin,
+    ThemeMode? themeMode,
   }) =>
       AppSettings(
         rotationInterval: rotationInterval ?? this.rotationInterval,
@@ -178,6 +182,7 @@ class AppSettings {
         autoRotate: autoRotate ?? this.autoRotate,
         artMovementFilter: artMovementFilter ?? this.artMovementFilter,
         launchAtLogin: launchAtLogin ?? this.launchAtLogin,
+        themeMode: themeMode ?? this.themeMode,
       );
 }
 
@@ -190,6 +195,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _kRotationIntervalMs = 'rotation_interval_ms';
   static const _kPreferLandscape = 'prefer_landscape';
   static const _kArtMovements = 'art_movement_filter';
+  static const _kThemeMode = 'theme_mode';
 
   @override
   AppSettings build() {
@@ -208,6 +214,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
       final preferLandscape = prefs.getBool(_kPreferLandscape) ?? true;
       final movementsList = prefs.getStringList(_kArtMovements) ?? [];
       final launchAtLogin = prefs.getBool(_kLaunchAtLogin) ?? false;
+      final themeModeStr = prefs.getString(_kThemeMode) ?? 'dark';
+      final themeMode = _themeModeFromString(themeModeStr);
 
       state = state.copyWith(
         autoRotate: autoRotate,
@@ -215,6 +223,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
         preferLandscape: preferLandscape,
         artMovementFilter: Set<String>.from(movementsList),
         launchAtLogin: launchAtLogin,
+        themeMode: themeMode,
       );
 
       // Sync system Login Items to match persisted preference.
@@ -268,4 +277,22 @@ class SettingsNotifier extends Notifier<AppSettings> {
       await LaunchAtStartup.instance.disable();
     }
   }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    state = state.copyWith(themeMode: mode);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kThemeMode, _themeModeToString(mode));
+  }
 }
+
+ThemeMode _themeModeFromString(String s) => switch (s) {
+      'light' => ThemeMode.light,
+      'system' => ThemeMode.system,
+      _ => ThemeMode.dark,
+    };
+
+String _themeModeToString(ThemeMode m) => switch (m) {
+      ThemeMode.light => 'light',
+      ThemeMode.system => 'system',
+      ThemeMode.dark => 'dark',
+    };
