@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -198,28 +199,32 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 
   Future<void> _loadAllSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    final autoRotate = prefs.getBool(_kAutoRotate) ?? true;
-    final intervalMs = prefs.getInt(_kRotationIntervalMs) ??
-        const Duration(hours: 24).inMilliseconds;
-    final preferLandscape = prefs.getBool(_kPreferLandscape) ?? true;
-    final movementsList = prefs.getStringList(_kArtMovements) ?? [];
-    final launchAtLogin = prefs.getBool(_kLaunchAtLogin) ?? false;
+      final autoRotate = prefs.getBool(_kAutoRotate) ?? true;
+      final intervalMs = prefs.getInt(_kRotationIntervalMs) ??
+          const Duration(hours: 24).inMilliseconds;
+      final preferLandscape = prefs.getBool(_kPreferLandscape) ?? true;
+      final movementsList = prefs.getStringList(_kArtMovements) ?? [];
+      final launchAtLogin = prefs.getBool(_kLaunchAtLogin) ?? false;
 
-    state = state.copyWith(
-      autoRotate: autoRotate,
-      rotationInterval: Duration(milliseconds: intervalMs),
-      preferLandscape: preferLandscape,
-      artMovementFilter: Set<String>.from(movementsList),
-      launchAtLogin: launchAtLogin,
-    );
+      state = state.copyWith(
+        autoRotate: autoRotate,
+        rotationInterval: Duration(milliseconds: intervalMs),
+        preferLandscape: preferLandscape,
+        artMovementFilter: Set<String>.from(movementsList),
+        launchAtLogin: launchAtLogin,
+      );
 
-    // Sync system Login Items to match persisted preference.
-    if (launchAtLogin) {
-      await LaunchAtStartup.instance.enable();
-    } else {
-      await LaunchAtStartup.instance.disable();
+      // Sync system Login Items to match persisted preference.
+      if (launchAtLogin) {
+        await LaunchAtStartup.instance.enable();
+      } else {
+        await LaunchAtStartup.instance.disable();
+      }
+    } catch (e, stack) {
+      debugPrint('[SettingsNotifier] Failed to load settings: $e\n$stack');
     }
   }
 
