@@ -167,6 +167,11 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
 
       return enriched.copyWith(setAt: DateTime.now());
     });
+
+    if (state is AsyncError) {
+      final err = state as AsyncError;
+      debugPrint('[refresh] Failed: ${err.error}\n${err.stackTrace}');
+    }
   }
 }
 
@@ -275,10 +280,15 @@ class SettingsNotifier extends Notifier<AppSettings> {
       );
 
       // Sync system Login Items to match persisted preference.
-      if (launchAtLogin) {
-        await LaunchAtStartup.instance.enable();
-      } else {
-        await LaunchAtStartup.instance.disable();
+      // Wrapped separately: LaunchAtStartup plugin is unavailable in flutter run.
+      try {
+        if (launchAtLogin) {
+          await LaunchAtStartup.instance.enable();
+        } else {
+          await LaunchAtStartup.instance.disable();
+        }
+      } catch (e) {
+        debugPrint('[SettingsNotifier] LaunchAtStartup sync skipped: $e');
       }
     } catch (e, stack) {
       debugPrint('[SettingsNotifier] Failed to load settings: $e\n$stack');

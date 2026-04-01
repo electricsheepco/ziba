@@ -50,8 +50,8 @@ _$ArtistSummaryImpl _$$ArtistSummaryImplFromJson(Map<String, dynamic> json) =>
     _$ArtistSummaryImpl(
       url: json['url'] as String,
       artistName: json['artistName'] as String,
-      birthDay: (json['birthDay'] as num?)?.toInt(),
-      deathDay: (json['deathDay'] as num?)?.toInt(),
+      birthDay: null, // API returns /Date(ms)/ string format — not used
+      deathDay: null, // API returns /Date(ms)/ string format — not used
       image: json['image'] as String?,
       nationality: json['nationality'] as String?,
     );
