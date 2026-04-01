@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ziba/state/app_state.dart';
@@ -14,6 +15,7 @@ void main() {
     expect(s.preferLandscape, isTrue);
     expect(s.artMovementFilter, isEmpty);
     expect(s.launchAtLogin, isFalse);
+    expect(s.themeMode, ThemeMode.dark);
   });
 
   test('AppSettings.copyWith preserves unset fields', () {
@@ -29,5 +31,12 @@ void main() {
     final s2 = s.copyWith(rotationInterval: const Duration(hours: 6));
     expect(s2.rotationInterval, const Duration(hours: 6));
     expect(s2.autoRotate, isTrue); // unchanged
+  });
+
+  test('AppSettings.copyWith preserves themeMode', () {
+    const s = AppSettings(themeMode: ThemeMode.light);
+    final s2 = s.copyWith(autoRotate: false);
+    expect(s2.themeMode, ThemeMode.light);  // preserved
+    expect(s2.autoRotate, isFalse);          // changed
   });
 }
