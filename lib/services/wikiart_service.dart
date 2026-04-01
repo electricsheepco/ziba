@@ -164,32 +164,99 @@ class WikiArtService {
 
   /// Get a random artwork suitable for wallpaper.
   ///
-  /// Strategy:
-  /// 1. Use cached "most viewed" list for fast picks
-  /// 2. Filter for landscape orientation (width > height) on desktop
-  /// 3. Prefer high-resolution images
+  /// Strategy (diversity):
+  /// 1. Load artist list from cache (or fetch if stale)
+  /// 2. Pick a random artist, excluding the last 10 shown (in-memory)
+  /// 3. Fetch that artist's paintings, filter for ≥1920px on longest edge
+  /// 4. Pick a random painting from the filtered list
+  /// 5. Retry up to 5 times with a new artist if no usable paintings found
+  /// 6. Fall back to MostViewedPaintings pool if all retries exhausted
   Future<Artwork> getRandomArtwork({
     bool preferLandscape = false,
+    List<int>? excludeIds,
+  }) async {
+    for (int attempt = 0; attempt < 5; attempt++) {
+      final artwork = await _tryRandomArtistPainting(
+        preferLandscape: preferLandscape,
+        excludeIds: excludeIds,
+      );
+      if (artwork != null) return artwork;
+    }
+
+    // Fallback: existing MostViewedPaintings behaviour
+    return _getRandomFromMostViewed(
+      preferLandscape: preferLandscape,
+      excludeIds: excludeIds,
+    );
+  }
+
+  /// Single attempt: pick one random artist, return a qualifying painting or null.
+  Future<Artwork?> _tryRandomArtistPainting({
+    required bool preferLandscape,
+    List<int>? excludeIds,
+  }) async {
+    final artists = await getArtistList();
+    if (artists.isEmpty) return null;
+
+    // Filter out recently shown artists
+    final candidates = artists
+        .where((a) => !_recentArtistUrls.contains(a.url))
+        .toList();
+    final pool = candidates.isNotEmpty ? candidates : artists;
+
+    final artist = pool[_random.nextInt(pool.length)];
+
+    List<Artwork> paintings;
+    try {
+      paintings = await getPaintingsByArtist(artist.url);
+    } catch (_) {
+      return null;
+    }
+
+    // Resolution filter: longest edge ≥ 1920px
+    var usable = paintings.where((p) {
+      if (p.width == null || p.height == null) return false;
+      return max(p.width!, p.height!) >= 1920;
+    }).toList();
+
+    if (preferLandscape) {
+      final landscape = usable
+          .where((p) => p.width != null && p.height != null && p.width! > p.height!)
+          .toList();
+      if (landscape.isNotEmpty) usable = landscape;
+    }
+
+    if (excludeIds != null) {
+      usable = usable.where((p) => !excludeIds.contains(p.contentId)).toList();
+    }
+
+    if (usable.isEmpty) return null;
+
+    // Track artist recency
+    _recentArtistUrls.add(artist.url);
+    if (_recentArtistUrls.length > _recentArtistLimit) {
+      _recentArtistUrls.removeAt(0);
+    }
+
+    return usable[_random.nextInt(usable.length)];
+  }
+
+  /// Fallback: pick from MostViewedPaintings (original behaviour).
+  Future<Artwork> _getRandomFromMostViewed({
+    required bool preferLandscape,
     List<int>? excludeIds,
   }) async {
     final artworks = await _getOrRefreshIndex();
 
     var candidates = artworks.where((a) {
-      // Exclude already-shown
-      if (excludeIds != null && excludeIds.contains(a.contentId)) {
-        return false;
-      }
-      // Filter orientation
+      if (excludeIds != null && excludeIds.contains(a.contentId)) return false;
       if (preferLandscape && a.width != null && a.height != null) {
         return a.width! > a.height!;
       }
       return true;
     }).toList();
 
-    if (candidates.isEmpty) {
-      // Reset: if we've exhausted the pool, use full list
-      candidates = artworks;
-    }
+    if (candidates.isEmpty) candidates = artworks;
 
     return candidates[_random.nextInt(candidates.length)];
   }
