@@ -185,24 +185,72 @@ final settingsProvider =
 
 class SettingsNotifier extends Notifier<AppSettings> {
   static const _kLaunchAtLogin = 'launch_at_login';
+  static const _kAutoRotate = 'auto_rotate';
+  static const _kRotationIntervalMs = 'rotation_interval_ms';
+  static const _kPreferLandscape = 'prefer_landscape';
+  static const _kArtMovements = 'art_movement_filter';
 
   @override
   AppSettings build() {
-    // Load persisted launchAtLogin asynchronously and sync system state.
-    _loadLaunchAtLogin();
+    // Load all persisted settings asynchronously on startup.
+    _loadAllSettings();
     return const AppSettings();
   }
 
-  Future<void> _loadLaunchAtLogin() async {
+  Future<void> _loadAllSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getBool(_kLaunchAtLogin) ?? false;
-    state = state.copyWith(launchAtLogin: value);
+
+    final autoRotate = prefs.getBool(_kAutoRotate) ?? true;
+    final intervalMs = prefs.getInt(_kRotationIntervalMs) ??
+        const Duration(hours: 24).inMilliseconds;
+    final preferLandscape = prefs.getBool(_kPreferLandscape) ?? true;
+    final movementsList = prefs.getStringList(_kArtMovements) ?? [];
+    final launchAtLogin = prefs.getBool(_kLaunchAtLogin) ?? false;
+
+    state = state.copyWith(
+      autoRotate: autoRotate,
+      rotationInterval: Duration(milliseconds: intervalMs),
+      preferLandscape: preferLandscape,
+      artMovementFilter: Set<String>.from(movementsList),
+      launchAtLogin: launchAtLogin,
+    );
+
     // Sync system Login Items to match persisted preference.
-    if (value) {
+    if (launchAtLogin) {
       await LaunchAtStartup.instance.enable();
     } else {
       await LaunchAtStartup.instance.disable();
     }
+  }
+
+  Future<void> setAutoRotate(bool v) async {
+    state = state.copyWith(autoRotate: v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAutoRotate, v);
+  }
+
+  Future<void> setInterval(Duration d) async {
+    state = state.copyWith(rotationInterval: d);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kRotationIntervalMs, d.inMilliseconds);
+  }
+
+  Future<void> setPreferLandscape(bool v) async {
+    state = state.copyWith(preferLandscape: v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kPreferLandscape, v);
+  }
+
+  Future<void> toggleArtMovement(String movement) async {
+    final current = Set<String>.from(state.artMovementFilter);
+    if (current.contains(movement)) {
+      current.remove(movement);
+    } else {
+      current.add(movement);
+    }
+    state = state.copyWith(artMovementFilter: current);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_kArtMovements, current.toList());
   }
 
   Future<void> setLaunchAtLogin(bool v) async {
@@ -214,21 +262,5 @@ class SettingsNotifier extends Notifier<AppSettings> {
     } else {
       await LaunchAtStartup.instance.disable();
     }
-  }
-
-  void setInterval(Duration d) =>
-      state = state.copyWith(rotationInterval: d);
-  void setPreferLandscape(bool v) =>
-      state = state.copyWith(preferLandscape: v);
-  void setAutoRotate(bool v) =>
-      state = state.copyWith(autoRotate: v);
-  void toggleArtMovement(String movement) {
-    final current = Set<String>.from(state.artMovementFilter);
-    if (current.contains(movement)) {
-      current.remove(movement);
-    } else {
-      current.add(movement);
-    }
-    state = state.copyWith(artMovementFilter: current);
   }
 }
