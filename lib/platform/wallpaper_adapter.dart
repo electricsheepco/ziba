@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 
 /// Abstract adapter for setting wallpapers across platforms.
@@ -41,10 +42,14 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
 
   @override
   Future<bool> setWallpaper(String imagePath) async {
+    // Pre-crop portrait images to screen aspect ratio (top-anchored)
+    // to prevent macOS from center-cropping off the top of tall paintings.
+    final wallpaperPath = await _cropToScreenAspect(imagePath);
+
     // Method 1: osascript (works without entitlements)
     final result = await Process.run('osascript', [
       '-e',
-      'tell application "System Events" to tell every desktop to set picture to POSIX file "$imagePath"',
+      'tell application "System Events" to tell every desktop to set picture to POSIX file "$wallpaperPath"',
     ]);
 
     if (result.exitCode == 0) return true;
@@ -55,7 +60,7 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
         '${Platform.environment['HOME']}/Library/Application Support/Dock/desktoppicture.db';
     final sqlResult = await Process.run('sqlite3', [
       dbPath,
-      "UPDATE data SET value = '$imagePath';",
+      "UPDATE data SET value = '$wallpaperPath';",
     ]);
 
     if (sqlResult.exitCode == 0) {
@@ -65,6 +70,72 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
     }
 
     return false;
+  }
+
+  /// Crops a portrait image to the primary display's aspect ratio, anchored to top.
+  ///
+  /// Portrait images on landscape screens would otherwise be center-cropped by
+  /// macOS, cutting off the top of the painting. We pre-crop to screen ratio
+  /// anchored to top so the full upper composition is preserved.
+  ///
+  /// Returns the original path unchanged if no crop is needed (image is already
+  /// wider than or equal to the screen aspect ratio) or if any step fails.
+  Future<String> _cropToScreenAspect(String imagePath) async {
+    try {
+      // Get primary display aspect ratio
+      final displays = ui.PlatformDispatcher.instance.displays;
+      if (displays.isEmpty) return imagePath;
+      final display = displays.first;
+      final screenAspect = display.size.width / display.size.height;
+
+      // Decode image to check dimensions
+      final bytes = await File(imagePath).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final srcImage = frame.image;
+      final imageWidth = srcImage.width;
+      final imageHeight = srcImage.height;
+      final imageAspect = imageWidth / imageHeight;
+
+      // No vertical crop needed if image is already wider than screen ratio
+      if (imageAspect >= screenAspect) {
+        srcImage.dispose();
+        return imagePath;
+      }
+
+      // Crop height for screen ratio, anchored to top of image
+      final cropHeight =
+          (imageWidth / screenAspect).round().clamp(1, imageHeight);
+
+      // Render the top slice
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawImageRect(
+        srcImage,
+        ui.Rect.fromLTWH(0, 0, imageWidth.toDouble(), cropHeight.toDouble()),
+        ui.Rect.fromLTWH(0, 0, imageWidth.toDouble(), cropHeight.toDouble()),
+        ui.Paint(),
+      );
+      final picture = recorder.endRecording();
+      final cropped = await picture.toImage(imageWidth, cropHeight);
+      srcImage.dispose();
+
+      final byteData =
+          await cropped.toByteData(format: ui.ImageByteFormat.png);
+      cropped.dispose();
+      if (byteData == null) return imagePath;
+
+      // Save alongside original (reuse path, overwrite each refresh)
+      final croppedPath =
+          imagePath.replaceAll(RegExp(r'\.[^.]+$'), '_cropped.png');
+      await File(croppedPath).writeAsBytes(byteData.buffer.asUint8List());
+
+      return croppedPath;
+    } catch (e) {
+      debugPrint(
+          '[MacOSWallpaperAdapter] Pre-crop failed, using original: $e');
+      return imagePath;
+    }
   }
 }
 
