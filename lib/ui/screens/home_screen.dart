@@ -415,7 +415,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       if (dx.abs() > dy.abs() && dx.abs() > 0) {
                         setState(() {
                           _panOffset =
-                              (_panOffset + dx / 600).clamp(0.0, 1.0);
+                              (_panOffset + dx / 300).clamp(0.0, 1.0);
                         });
                       }
                     }
