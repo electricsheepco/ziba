@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ThemeMode;
@@ -335,3 +337,27 @@ String _themeModeToString(ThemeMode m) => switch (m) {
       ThemeMode.system => 'system',
       ThemeMode.dark => 'dark',
     };
+
+// ──────────────────────────────────────────────
+// Auto-rotation timer
+// ──────────────────────────────────────────────
+
+/// Manages the auto-rotation timer. Must be watched in a long-lived widget.
+///
+/// The timer is recreated whenever autoRotate or rotationInterval changes.
+/// Riverpod's ref.onDispose cancels the previous timer automatically.
+final autoRotateTimerProvider = Provider<void>((ref) {
+  final autoRotate = ref.watch(settingsProvider.select((s) => s.autoRotate));
+  final interval = ref.watch(settingsProvider.select((s) => s.rotationInterval));
+
+  if (!autoRotate) return;
+
+  final timer = Timer.periodic(interval, (_) {
+    final currentState = ref.read(currentArtworkProvider);
+    if (!currentState.isLoading) {
+      ref.read(currentArtworkProvider.notifier).refresh();
+    }
+  });
+
+  ref.onDispose(timer.cancel);
+});

@@ -33,6 +33,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Keep the auto-rotation timer alive for the full app session.
+    ref.watch(autoRotateTimerProvider);
     final currentIndex = ref.watch(activeTabProvider);
     return Focus(
       focusNode: _focusNode,
