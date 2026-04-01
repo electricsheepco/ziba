@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
@@ -175,10 +176,12 @@ class WikiArtService {
     bool preferLandscape = false,
     List<int>? excludeIds,
   }) async {
+    final attemptedThisCall = <String>{};
     for (int attempt = 0; attempt < 5; attempt++) {
       final artwork = await _tryRandomArtistPainting(
         preferLandscape: preferLandscape,
         excludeIds: excludeIds,
+        attemptedThisCall: attemptedThisCall,
       );
       if (artwork != null) return artwork;
     }
@@ -194,22 +197,27 @@ class WikiArtService {
   Future<Artwork?> _tryRandomArtistPainting({
     required bool preferLandscape,
     List<int>? excludeIds,
+    required Set<String> attemptedThisCall,
   }) async {
     final artists = await getArtistList();
     if (artists.isEmpty) return null;
 
-    // Filter out recently shown artists
+    // Filter out recently shown artists AND artists tried in this call
     final candidates = artists
-        .where((a) => !_recentArtistUrls.contains(a.url))
+        .where((a) => !_recentArtistUrls.contains(a.url) && !attemptedThisCall.contains(a.url))
         .toList();
     final pool = candidates.isNotEmpty ? candidates : artists;
 
     final artist = pool[_random.nextInt(pool.length)];
 
+    // Mark as attempted immediately (before API call, whether successful or not)
+    attemptedThisCall.add(artist.url);
+
     List<Artwork> paintings;
     try {
       paintings = await getPaintingsByArtist(artist.url);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[WikiArtService] Failed to fetch paintings for ${artist.url}: $e');
       return null;
     }
 
