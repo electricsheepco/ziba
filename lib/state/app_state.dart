@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ThemeMode;
@@ -54,6 +53,48 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
     ));
   }
 
+  /// Fetch one artwork, enrich with detail data, and check movement filter.
+  /// Returns null if the filter is active and the artwork's style doesn't match.
+  Future<model.Artwork?> _fetchEnriched({
+    required WikiArtService wikiArt,
+    required AppDatabase db,
+    required bool preferLandscape,
+    required Set<String> movementFilter,
+  }) async {
+    final recentIds = await db.getRecentHistoryIds();
+
+    final artwork = await wikiArt.getRandomArtwork(
+      preferLandscape: preferLandscape,
+      excludeIds: recentIds,
+    );
+
+    // Enrich with detail endpoint (style, genre, technique, galleryName only).
+    // The detail endpoint scrambles artistName order — keep list data for
+    // everything except the metadata fields that only the detail provides.
+    final detail = await wikiArt
+        .getPaintingDetail(artwork.contentId)
+        .catchError((_) => null);
+
+    final enriched = detail == null
+        ? artwork
+        : artwork.copyWith(
+            style: detail.style,
+            genre: detail.genre,
+            technique: detail.technique,
+            galleryName: detail.galleryName,
+          );
+
+    // If filter active and style is known but doesn't match, signal retry
+    if (movementFilter.isNotEmpty && enriched.style != null) {
+      final styleLC = enriched.style!.toLowerCase();
+      final matches =
+          movementFilter.any((m) => styleLC.contains(m.toLowerCase()));
+      if (!matches) return null;
+    }
+
+    return enriched;
+  }
+
   /// Fetch a new random artwork and optionally set as wallpaper.
   Future<void> refresh({bool setWallpaper = true}) async {
     state = const AsyncLoading();
@@ -62,37 +103,31 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
       final wikiArt = ref.read(wikiArtProvider);
       final db = ref.read(databaseProvider);
       final adapter = ref.read(wallpaperAdapterProvider);
+      final settings = ref.read(settingsProvider);
 
-      // Exclude recent history
-      final recentIds = await db.getRecentHistoryIds();
+      // Try up to 5 times to find an artwork matching the movement filter.
+      model.Artwork? enriched;
+      for (int i = 0; i < 5; i++) {
+        enriched = await _fetchEnriched(
+          wikiArt: wikiArt,
+          db: db,
+          preferLandscape: settings.preferLandscape,
+          movementFilter: settings.artMovementFilter,
+        );
+        if (enriched != null) break;
+      }
 
-      // Detect if desktop → prefer landscape
-      final isDesktop =
-          Platform.isMacOS || Platform.isLinux || Platform.isWindows;
-
-      // Fetch random artwork (list index — no style/genre/technique)
-      final artwork = await wikiArt.getRandomArtwork(
-        preferLandscape: isDesktop,
-        excludeIds: recentIds,
+      // Final fallback: one unconditional fetch ignoring the filter.
+      // movementFilter: const {} means no filter — always returns something.
+      enriched ??= await _fetchEnriched(
+        wikiArt: wikiArt,
+        db: db,
+        preferLandscape: settings.preferLandscape,
+        movementFilter: const {}, // no filter — always returns something
       );
 
-      // Enrich with detail endpoint (style, genre, technique, galleryName only).
-      // The detail endpoint scrambles artistName order — keep list data for
-      // everything except the metadata fields that only the detail provides.
-      final detail = await wikiArt
-          .getPaintingDetail(artwork.contentId)
-          .catchError((_) => null);
-      final enriched = detail == null
-          ? artwork
-          : artwork.copyWith(
-              style: detail.style,
-              genre: detail.genre,
-              technique: detail.technique,
-              galleryName: detail.galleryName,
-            );
-
       // Download image locally
-      final localPath = await wikiArt.downloadImage(artwork);
+      final localPath = await wikiArt.downloadImage(enriched!);
 
       // Store in database
       await db.upsertArtwork(ArtworksCompanion.insert(
@@ -109,10 +144,8 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
         style: Value(enriched.style),
       ));
 
-      // Add to history
-      await db.addToHistory(artwork.contentId);
+      await db.addToHistory(enriched.contentId);
 
-      // Set wallpaper
       if (setWallpaper && adapter.isSupported) {
         await adapter.setWallpaper(localPath);
       }
