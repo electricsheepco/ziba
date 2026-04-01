@@ -493,19 +493,6 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
 
     if (mounted) setState(() => _cropMode = false);
   }
-
-  Future<void> _removeAndPop(BuildContext context) async {
-    final artwork = widget.artwork;
-    final db = ref.read(databaseProvider);
-    await db.removeFavorite(artwork.contentId);
-
-    final localPath = artwork.localPath;
-    if (localPath != null && File(localPath).existsSync()) {
-      File(localPath).deleteSync();
-    }
-
-    if (context.mounted) Navigator.of(context).pop();
-  }
 }
 
 // ══════════════════════════════════════════════════

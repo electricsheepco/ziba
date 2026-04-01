@@ -134,8 +134,15 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
         recentIds: recentIds,
       );
 
+      // Guard: if WikiArt is unreachable even on the filter-free fallback
+      // (e.g. getArtistList() returned empty due to network failure),
+      // fail loudly rather than crashing on a null dereference below.
+      if (enriched == null) {
+        throw Exception('Failed to fetch artwork — WikiArt may be unreachable');
+      }
+
       // Download image locally
-      final localPath = await wikiArt.downloadImage(enriched!);
+      final localPath = await wikiArt.downloadImage(enriched);
 
       // Store in database
       await db.upsertArtwork(ArtworksCompanion.insert(
