@@ -345,7 +345,8 @@ String _themeModeToString(ThemeMode m) => switch (m) {
 /// Manages the auto-rotation timer. Must be watched in a long-lived widget.
 ///
 /// The timer is recreated whenever autoRotate or rotationInterval changes.
-/// Riverpod's ref.onDispose cancels the previous timer automatically.
+/// Riverpod disposes the previous provider instance (cancelling the timer via
+/// onDispose) before the new instance runs — including when toggling off.
 final autoRotateTimerProvider = Provider<void>((ref) {
   final autoRotate = ref.watch(settingsProvider.select((s) => s.autoRotate));
   final interval = ref.watch(settingsProvider.select((s) => s.rotationInterval));
