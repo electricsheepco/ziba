@@ -21,6 +21,17 @@ class WikiArtService {
   DateTime? _cacheTimestamp;
   static const _cacheDuration = Duration(hours: 24);
 
+  // Artist list cache (7-day TTL on disk, 24h in-memory)
+  List<ArtistSummary>? _cachedArtists;
+  DateTime? _artistsCacheTimestamp;
+  static const _artistsCacheDuration = Duration(hours: 24);
+
+  // Recency exclusion: last 10 artist URLs shown in this session (used in Task 5)
+  // ignore: unused_field
+  final List<String> _recentArtistUrls = [];
+  // ignore: unused_field
+  static const _recentArtistLimit = 10;
+
   WikiArtService({Dio? dio})
       : _dio = dio ??
             Dio(BaseOptions(
@@ -92,6 +103,35 @@ class WikiArtService {
           .toList();
     }
     return [];
+  }
+
+  /// Returns all WikiArt artists. Fetches once, caches to disk for 7 days.
+  Future<List<ArtistSummary>> getArtistList() async {
+    // In-memory cache (24h)
+    if (_cachedArtists != null &&
+        _artistsCacheTimestamp != null &&
+        DateTime.now().difference(_artistsCacheTimestamp!) <
+            _artistsCacheDuration) {
+      return _cachedArtists!;
+    }
+
+    // Disk cache (7 days)
+    final diskCache = await _loadArtistDiskCache();
+    if (diskCache != null) {
+      _cachedArtists = diskCache;
+      _artistsCacheTimestamp = DateTime.now();
+      return _cachedArtists!;
+    }
+
+    // Fetch from API — AlphabetJson returns all artists in one response
+    final artists = await getArtists();
+    if (artists.isNotEmpty) {
+      _cachedArtists = artists;
+      _artistsCacheTimestamp = DateTime.now();
+      await _saveArtistDiskCache(artists);
+    }
+
+    return _cachedArtists ?? [];
   }
 
   /// Fetch paintings by a specific artist.
@@ -254,6 +294,11 @@ class WikiArtService {
     return '${dir.path}/ziba_index.json';
   }
 
+  Future<String> get _artistsCacheFilePath async {
+    final dir = await getApplicationSupportDirectory();
+    return '${dir.path}/ziba_artists.json';
+  }
+
   Future<List<Artwork>?> _loadDiskCache() async {
     final path = await _cacheFilePath;
     final file = File(path);
@@ -277,6 +322,31 @@ class WikiArtService {
   Future<void> _saveDiskCache(List<Artwork> artworks) async {
     final path = await _cacheFilePath;
     final json = artworks.map((a) => a.toJson()).toList();
+    File(path).writeAsStringSync(jsonEncode(json));
+  }
+
+  Future<List<ArtistSummary>?> _loadArtistDiskCache() async {
+    final path = await _artistsCacheFilePath;
+    final file = File(path);
+    if (!file.existsSync()) return null;
+
+    final modified = file.lastModifiedSync();
+    if (DateTime.now().difference(modified) > const Duration(days: 7)) {
+      return null;
+    }
+
+    final json = jsonDecode(file.readAsStringSync());
+    if (json is List) {
+      return json
+          .map((e) => ArtistSummary.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    return null;
+  }
+
+  Future<void> _saveArtistDiskCache(List<ArtistSummary> artists) async {
+    final path = await _artistsCacheFilePath;
+    final json = artists.map((a) => a.toJson()).toList();
     File(path).writeAsStringSync(jsonEncode(json));
   }
 
