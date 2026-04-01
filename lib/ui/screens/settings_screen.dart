@@ -173,7 +173,7 @@ class SettingsScreen extends ConsumerWidget {
                 // About
                 Text('ABOUT', style: theme.textTheme.labelSmall),
                 const SizedBox(height: 12),
-                Text('Ziba v1.2.0', style: theme.textTheme.bodyLarge),
+                Text('Ziba v1.2.2', style: theme.textTheme.bodyLarge),
                 const SizedBox(height: 4),
                 Text(
                   'Your screen. Their masterpiece.',
@@ -192,7 +192,7 @@ class SettingsScreen extends ConsumerWidget {
                 // Credits
                 Text('CREDITS', style: theme.textTheme.labelSmall),
                 const SizedBox(height: 12),
-                const _CreditRow(label: 'Artwork', value: 'WikiArt.org'),
+                const _CreditRow(label: 'Artwork', value: '5,700+ artists · WikiArt.org'),
                 const SizedBox(height: 8),
                 const _CreditRow(label: 'Built with', value: 'Flutter'),
                 const SizedBox(height: 8),
@@ -295,7 +295,7 @@ class _ThemeModeSelector extends StatelessWidget {
       children: options.map((opt) {
         return ChoiceChip(
           label: Text(opt.label,
-              style: theme.textTheme.bodyMedium?.copyWith(fontSize: 11)),
+              style: theme.textTheme.bodyMedium),
           selected: current == opt.mode,
           onSelected: (_) => onChanged(opt.mode),
         );
