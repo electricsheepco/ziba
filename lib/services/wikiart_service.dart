@@ -27,9 +27,7 @@ class WikiArtService {
   static const _artistsCacheDuration = Duration(hours: 24);
 
   // Recency exclusion: last 10 artist URLs shown in this session (used in Task 5)
-  // ignore: unused_field
   final List<String> _recentArtistUrls = [];
-  // ignore: unused_field
   static const _recentArtistLimit = 10;
 
   WikiArtService({Dio? dio})
@@ -105,7 +103,9 @@ class WikiArtService {
     return [];
   }
 
-  /// Returns all WikiArt artists. Fetches once, caches to disk for 7 days.
+  /// Returns all WikiArt artists.
+  /// Served from in-memory cache (24h), falling back to disk cache (7-day TTL),
+  /// then the WikiArt AlphabetJson API.
   Future<List<ArtistSummary>> getArtistList() async {
     // In-memory cache (24h)
     if (_cachedArtists != null &&
@@ -310,19 +310,23 @@ class WikiArtService {
       return null;
     }
 
-    final json = jsonDecode(file.readAsStringSync());
-    if (json is List) {
-      return json
-          .map((e) => Artwork.fromJson(e as Map<String, dynamic>))
-          .toList();
+    try {
+      final json = jsonDecode(file.readAsStringSync());
+      if (json is List) {
+        return json
+            .map((e) => Artwork.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
-    return null;
   }
 
   Future<void> _saveDiskCache(List<Artwork> artworks) async {
     final path = await _cacheFilePath;
     final json = artworks.map((a) => a.toJson()).toList();
-    File(path).writeAsStringSync(jsonEncode(json));
+    await File(path).writeAsString(jsonEncode(json));
   }
 
   Future<List<ArtistSummary>?> _loadArtistDiskCache() async {
@@ -335,19 +339,23 @@ class WikiArtService {
       return null;
     }
 
-    final json = jsonDecode(file.readAsStringSync());
-    if (json is List) {
-      return json
-          .map((e) => ArtistSummary.fromJson(e as Map<String, dynamic>))
-          .toList();
+    try {
+      final json = jsonDecode(file.readAsStringSync());
+      if (json is List) {
+        return json
+            .map((e) => ArtistSummary.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
-    return null;
   }
 
   Future<void> _saveArtistDiskCache(List<ArtistSummary> artists) async {
     final path = await _artistsCacheFilePath;
     final json = artists.map((a) => a.toJson()).toList();
-    File(path).writeAsStringSync(jsonEncode(json));
+    await File(path).writeAsString(jsonEncode(json));
   }
 
   // ──────────────────────────────────────────────
