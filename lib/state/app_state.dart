@@ -60,9 +60,8 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
     required AppDatabase db,
     required bool preferLandscape,
     required Set<String> movementFilter,
+    required List<int> recentIds,
   }) async {
-    final recentIds = await db.getRecentHistoryIds();
-
     final artwork = await wikiArt.getRandomArtwork(
       preferLandscape: preferLandscape,
       excludeIds: recentIds,
@@ -84,8 +83,10 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
             galleryName: detail.galleryName,
           );
 
-    // If filter active and style is known but doesn't match, signal retry
-    if (movementFilter.isNotEmpty && enriched.style != null) {
+    // If filter active: style-null artworks can't be matched — signal retry.
+    // Only let the artwork through if style is known and matches the filter.
+    if (movementFilter.isNotEmpty) {
+      if (enriched.style == null) return null; // style unknown — retry
       final styleLC = enriched.style!.toLowerCase();
       final matches =
           movementFilter.any((m) => styleLC.contains(m.toLowerCase()));
@@ -105,6 +106,9 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
       final adapter = ref.read(wallpaperAdapterProvider);
       final settings = ref.read(settingsProvider);
 
+      // Fetch once so all retry attempts share the same exclusion list.
+      final recentIds = await db.getRecentHistoryIds();
+
       // Try up to 5 times to find an artwork matching the movement filter.
       model.Artwork? enriched;
       for (int i = 0; i < 5; i++) {
@@ -113,6 +117,7 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
           db: db,
           preferLandscape: settings.preferLandscape,
           movementFilter: settings.artMovementFilter,
+          recentIds: recentIds,
         );
         if (enriched != null) break;
       }
@@ -124,6 +129,7 @@ class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
         db: db,
         preferLandscape: settings.preferLandscape,
         movementFilter: const {}, // no filter — always returns something
+        recentIds: recentIds,
       );
 
       // Download image locally
