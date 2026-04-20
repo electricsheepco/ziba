@@ -8,7 +8,8 @@ plugins {
 android {
     namespace = "com.essco.ziba"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pin to available NDK; flutter.ndkVersion resolves to a malformed 28.x install.
+    ndkVersion = "27.1.12297006"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
