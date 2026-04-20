@@ -207,6 +207,7 @@ class _ArtworkDisplay extends ConsumerStatefulWidget {
 class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
   bool _cropMode = false;
   double _panOffset = 0.0;
+  double _verticalPanOffset = 0.0;
   // null = slider hidden; 0.0–1.0 = dim amount
   double? _dimLevel;
   // null = slider hidden; -1.0 (cool) to +1.0 (warm)
@@ -219,6 +220,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
       setState(() {
         _cropMode = false;
         _panOffset = 0.0;
+        _verticalPanOffset = 0.0;
         _dimLevel = null;
         _toneLevel = null;
       });
@@ -250,11 +252,16 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
         ? Size(display.size.width / display.devicePixelRatio,
                display.size.height / display.devicePixelRatio)
         : screenSize;
+    final imageNativeSize = Size(
+      (artwork.width ?? 1).toDouble(),
+      (artwork.height ?? 1).toDouble(),
+    );
     final showSlider = needsPanSlider(
-      imageNativeSize: Size(
-        (artwork.width ?? 1).toDouble(),
-        (artwork.height ?? 1).toDouble(),
-      ),
+      imageNativeSize: imageNativeSize,
+      screenSize: displaySize,
+    );
+    final showVerticalSlider = needsVerticalSlider(
+      imageNativeSize: imageNativeSize,
       screenSize: displaySize,
     );
 
@@ -273,11 +280,13 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                   CachedNetworkImage(
                     imageUrl: artwork.image,
                     fit: BoxFit.cover,
-                    // Pan the image when slider is active so the user sees
-                    // which portion will be used as wallpaper.
+                    // Pan the image when a crop slider is active so the user
+                    // sees which portion will be used as wallpaper.
                     alignment: showSlider
                         ? Alignment(_panOffset * 2 - 1, 0)
-                        : Alignment.center,
+                        : showVerticalSlider
+                            ? Alignment(0, _verticalPanOffset * 2 - 1)
+                            : Alignment.center,
                     placeholder: (_, __) => Container(
                       color: theme.colorScheme.surfaceContainerHighest,
                       child: const Center(
@@ -380,6 +389,16 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                         ),
                       ),
                     ),
+                  if (showVerticalSlider && _cropMode)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _VerticalCropPainter(
+                          panOffset: _verticalPanOffset,
+                          screenAspectRatio:
+                              displaySize.width / displaySize.height,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -438,6 +457,83 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       value: _panOffset,
                       onChanged: (v) => setState(() => _panOffset = v),
                     ),
+                  ),
+                ),
+                if (_cropMode)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: _cancelCrop,
+                          icon: const Icon(Icons.close, size: 14),
+                          label: const Text('CANCEL',
+                              style: TextStyle(fontSize: 11)),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.icon(
+                          onPressed: () => _applyCrop(context),
+                          icon: const Icon(Icons.wallpaper, size: 14),
+                          label: const Text('SET AS WALLPAPER',
+                              style: TextStyle(fontSize: 11)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF6B8EC4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+        // Wallpaper crop selector — for portrait artworks (taller than screen)
+        if (showVerticalSlider)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.crop, size: 12, color: Color(0xFF6B8EC4)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'WALLPAPER CROP',
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
+                Listener(
+                  // Trackpad two-finger vertical scroll adjusts vertical crop.
+                  onPointerSignal: (event) {
+                    if (event is PointerScrollEvent) {
+                      final dx = event.scrollDelta.dx;
+                      final dy = event.scrollDelta.dy;
+                      if (dy.abs() > dx.abs() && dy.abs() > 0) {
+                        setState(() {
+                          _verticalPanOffset =
+                              (_verticalPanOffset + dy / 300).clamp(0.0, 1.0);
+                        });
+                      }
+                    }
+                  },
+                  child: _FilterSliderRow(
+                    icon: Icons.crop_din_outlined,
+                    label: 'TOP',
+                    trailingLabel: 'BOTTOM',
+                    value: _verticalPanOffset,
+                    min: 0,
+                    max: 1,
+                    onChanged: (v) => setState(() => _verticalPanOffset = v),
+                    theme: theme,
                   ),
                 ),
                 if (_cropMode)
@@ -534,7 +630,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                     icon: Icons.wallpaper,
                     label: 'SET',
                     onTap: () {
-                      if (showSlider) {
+                      if (showSlider || showVerticalSlider) {
                         setState(() => _cropMode = true);
                       } else {
                         _applyCrop(context);
@@ -583,6 +679,7 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     setState(() {
       _cropMode = false;
       _panOffset = 0.0;
+      _verticalPanOffset = 0.0;
     });
   }
 
@@ -607,12 +704,31 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     final frame = await codec.getNextFrame();
     final srcImage = frame.image;
 
-    final cropRect = calculateCropRect(
-      imageNativeSize: Size(
-          srcImage.width.toDouble(), srcImage.height.toDouble()),
-      screenSize: screenSize,
-      panOffset: _panOffset,
-    );
+    final nativeSize =
+        Size(srcImage.width.toDouble(), srcImage.height.toDouble());
+    final imageAspect = nativeSize.width / nativeSize.height;
+    final screenAspect = screenSize.width / screenSize.height;
+
+    final Rect cropRect;
+    if (imageAspect > screenAspect + 0.01) {
+      // Wider than screen — horizontal pan crop.
+      cropRect = calculateCropRect(
+        imageNativeSize: nativeSize,
+        screenSize: screenSize,
+        panOffset: _panOffset,
+      );
+    } else if (imageAspect < screenAspect - 0.01) {
+      // Taller than screen — vertical pan crop.
+      cropRect = calculateVerticalCropRect(
+        imageNativeSize: nativeSize,
+        screenSize: screenSize,
+        panOffset: _verticalPanOffset,
+      );
+    } else {
+      // Already close to screen aspect — no crop, adapter handles remainder.
+      cropRect =
+          Rect.fromLTWH(0, 0, nativeSize.width, nativeSize.height);
+    }
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -725,6 +841,53 @@ class _CropPainter extends CustomPainter {
       old.panOffset != panOffset ||
       old.screenAspectRatio != screenAspectRatio ||
       old.preview != preview;
+}
+
+// ══════════════════════════════════════════════════
+// Vertical crop overlay painter (portrait artworks)
+// ══════════════════════════════════════════════════
+
+class _VerticalCropPainter extends CustomPainter {
+  final double panOffset; // 0.0 = top, 1.0 = bottom
+  final double screenAspectRatio;
+
+  _VerticalCropPainter({
+    required this.panOffset,
+    required this.screenAspectRatio,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final boxHeight =
+        (size.width / screenAspectRatio).clamp(0.0, size.height);
+    final maxTop = size.height - boxHeight;
+    final boxTop = maxTop * panOffset;
+
+    final maskPaint = Paint()..color = const Color(0x80000000);
+    if (boxTop > 0) {
+      canvas.drawRect(
+          Rect.fromLTWH(0, 0, size.width, boxTop), maskPaint);
+    }
+    final bottomStart = boxTop + boxHeight;
+    if (bottomStart < size.height) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, bottomStart, size.width, size.height - bottomStart),
+        maskPaint,
+      );
+    }
+
+    canvas.drawRect(
+      Rect.fromLTWH(0, boxTop, size.width, boxHeight),
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_VerticalCropPainter old) =>
+      old.panOffset != panOffset || old.screenAspectRatio != screenAspectRatio;
 }
 
 // ══════════════════════════════════════════════════

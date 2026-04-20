@@ -88,6 +88,22 @@ class AppDatabase extends _$AppDatabase {
         }).toList());
   }
 
+  /// Get the most recent history entry with its artwork (for startup load).
+  Future<WallpaperHistoryWithArtwork?> getLatestHistoryEntry() async {
+    final query = select(wallpaperHistory).join([
+      innerJoin(artworks, artworks.contentId.equalsExp(wallpaperHistory.contentId)),
+    ])
+      ..orderBy([OrderingTerm.desc(wallpaperHistory.setAt)])
+      ..limit(1);
+    final rows = await query.get();
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return WallpaperHistoryWithArtwork(
+      history: row.readTable(wallpaperHistory),
+      artwork: row.readTable(artworks),
+    );
+  }
+
   /// Get list of contentIds from recent history (for exclusion in random picks).
   Future<List<int>> getRecentHistoryIds({int limit = 30}) async {
     final query = select(wallpaperHistory)

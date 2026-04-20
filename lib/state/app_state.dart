@@ -36,9 +36,24 @@ final currentArtworkProvider =
 class CurrentArtworkNotifier extends AsyncNotifier<model.Artwork?> {
   @override
   Future<model.Artwork?> build() async {
-    // On startup, load the most recent from history
-    // or fetch a new one
-    return null;
+    // On startup, load the most recent artwork from history (no network call).
+    // Returns null on first launch — shows the empty state with a prompt.
+    final db = ref.read(databaseProvider);
+    final entry = await db.getLatestHistoryEntry();
+    if (entry == null) return null;
+    final row = entry.artwork;
+    return model.Artwork(
+      contentId: row.contentId,
+      title: row.title,
+      artistName: row.artistName,
+      artistUrl: row.artistUrl,
+      image: row.imageUrl,
+      width: row.width,
+      height: row.height,
+      genre: row.genre,
+      style: row.style,
+      setAt: entry.history.setAt,
+    );
   }
 
   /// Load an artwork directly from a DB row (e.g. tapped from History).
@@ -361,18 +376,32 @@ String _themeModeToString(ThemeMode m) => switch (m) {
 
 /// Manages the auto-rotation timer. Must be watched in a long-lived widget.
 ///
-/// The timer is recreated whenever autoRotate or rotationInterval changes.
-/// Riverpod disposes the previous provider instance (cancelling the timer via
-/// onDispose) before the new instance runs — including when toggling off.
+/// Uses artwork.setAt (persisted in history DB) to calculate the remaining
+/// time until the next rotation — so the interval survives app restarts.
+/// The provider rebuilds whenever the artwork changes (after each refresh),
+/// resetting the timer to the full interval from the new setAt.
 final autoRotateTimerProvider = Provider<void>((ref) {
   final autoRotate = ref.watch(settingsProvider.select((s) => s.autoRotate));
   final interval = ref.watch(settingsProvider.select((s) => s.rotationInterval));
 
   if (!autoRotate) return;
 
-  final timer = Timer.periodic(interval, (_) {
-    final currentState = ref.read(currentArtworkProvider);
-    if (!currentState.isLoading) {
+  // Don't schedule while the provider is still loading the initial artwork.
+  final artworkAsync = ref.watch(currentArtworkProvider);
+  if (artworkAsync.isLoading) return;
+
+  // No artwork yet (first launch) — let the user trigger the first one manually.
+  final artwork = artworkAsync.valueOrNull;
+  if (artwork == null) return;
+
+  // Calculate how long until the next rotation is due.
+  final setAt = artwork.setAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final elapsed = DateTime.now().difference(setAt);
+  final remaining = interval - elapsed;
+  final delay = remaining > Duration.zero ? remaining : Duration.zero;
+
+  final timer = Timer(delay, () {
+    if (!ref.read(currentArtworkProvider).isLoading) {
       ref.read(currentArtworkProvider.notifier).refresh();
     }
   });
