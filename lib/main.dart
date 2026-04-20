@@ -1,15 +1,67 @@
 import 'dart:io';
-import 'dart:ui';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
+import 'package:workmanager/workmanager.dart';
+import 'data/database.dart';
+import 'platform/wallpaper_adapter.dart';
+import 'services/wikiart_service.dart';
 import 'state/app_state.dart';
 import 'ui/screens/home_screen.dart';
 
+/// Background task dispatcher for WorkManager (Android only).
+///
+/// Runs in an isolate — no Riverpod, no Flutter engine. Uses raw instances.
+/// WorkManager enforces a minimum period of 15 minutes regardless of the
+/// in-app rotation interval.
+@pragma('vm:entry-point')
+void _workmanagerDispatcher() {
+  Workmanager().executeTask((taskName, inputData) async {
+    if (taskName != 'ziba.autorotate') return true;
+
+    WidgetsFlutterBinding.ensureInitialized();
+    final db = AppDatabase();
+    final wikiArt = WikiArtService();
+    final adapter = WallpaperAdapter();
+
+    try {
+      final recentIds = await db.getRecentHistoryIds(limit: 30);
+      final artwork = await wikiArt.getRandomArtwork(excludeIds: recentIds);
+
+      await db.upsertArtwork(ArtworksCompanion(
+        contentId: Value(artwork.contentId),
+        title: Value(artwork.title),
+        artistName: Value(artwork.artistName),
+        artistUrl: Value(artwork.artistUrl),
+        imageUrl: Value(artwork.image),
+        width: artwork.width != null ? Value(artwork.width!) : const Value.absent(),
+        height: artwork.height != null ? Value(artwork.height!) : const Value.absent(),
+        genre: artwork.genre != null ? Value(artwork.genre!) : const Value.absent(),
+        style: artwork.style != null ? Value(artwork.style!) : const Value.absent(),
+      ));
+
+      final localPath = await wikiArt.downloadImage(artwork);
+      final success = await adapter.setWallpaper(localPath);
+      if (success) await db.addToHistory(artwork.contentId);
+    } catch (e) {
+      debugPrint('[WorkManager] autorotate failed: $e');
+      return false;
+    } finally {
+      await db.close();
+    }
+    return true;
+  });
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isAndroid) {
+    await Workmanager().initialize(_workmanagerDispatcher);
+  }
 
   if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
     LaunchAtStartup.instance.setup(

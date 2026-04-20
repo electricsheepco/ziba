@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart';
 import '../services/wikiart_service.dart';
 import '../data/database.dart';
 import '../platform/wallpaper_adapter.dart';
@@ -407,4 +409,27 @@ final autoRotateTimerProvider = Provider<void>((ref) {
   });
 
   ref.onDispose(timer.cancel);
+
+  // On Android, also schedule a WorkManager periodic task so wallpaper rotates
+  // even when the app is backgrounded. WorkManager enforces ≥15 min minimum.
+  if (Platform.isAndroid) {
+    final wmInterval = interval < const Duration(minutes: 15)
+        ? const Duration(minutes: 15)
+        : interval;
+    Workmanager().registerPeriodicTask(
+      'ziba.autorotate',
+      'ziba.autorotate',
+      frequency: wmInterval,
+      constraints: Constraints(networkType: NetworkType.connected),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+    );
+    ref.onDispose(() => Workmanager().cancelByUniqueName('ziba.autorotate'));
+  }
+});
+
+// Cancel WorkManager when auto-rotate is toggled off on Android.
+final androidAutoRotateCancelProvider = Provider<void>((ref) {
+  final autoRotate = ref.watch(settingsProvider.select((s) => s.autoRotate));
+  if (!Platform.isAndroid || autoRotate) return;
+  Workmanager().cancelByUniqueName('ziba.autorotate');
 });

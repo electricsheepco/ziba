@@ -34,8 +34,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Keep the auto-rotation timer alive for the full app session.
+    // Keep the auto-rotation timer and Android WorkManager cancel guard alive.
     ref.watch(autoRotateTimerProvider);
+    ref.watch(androidAutoRotateCancelProvider);
     final currentIndex = ref.watch(activeTabProvider);
     return Focus(
       focusNode: _focusNode,
