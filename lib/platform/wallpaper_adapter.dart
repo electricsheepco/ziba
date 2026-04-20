@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:gal/gal.dart';
 
 /// Abstract adapter for setting wallpapers across platforms.
 ///
@@ -320,57 +322,57 @@ public class Wallpaper {
 }
 
 // ══════════════════════════════════════════════════
-// Android — Platform Channel to WallpaperManager
+// Android — WallpaperManager via MethodChannel
 // ══════════════════════════════════════════════════
 
 class AndroidWallpaperAdapter implements WallpaperAdapter {
+  static const _channel = MethodChannel('com.ziba/wallpaper');
+
   @override
   bool get isSupported => true;
 
   @override
-  String get limitations => 'Sets home + lock screen wallpaper.';
+  String get limitations => 'Sets home + lock screen wallpaper via WallpaperManager.';
 
   @override
   Future<bool> setWallpaper(String imagePath) async {
-    // TODO: Implement via MethodChannel to native Kotlin code
-    // See android/app/src/main/kotlin/.../WallpaperPlugin.kt
-    //
-    // final channel = MethodChannel('com.ziba/wallpaper');
-    // final result = await channel.invokeMethod('setWallpaper', {
-    //   'path': imagePath,
-    //   'target': 'both', // 'home', 'lock', or 'both'
-    // });
-    // return result == true;
-
-    throw UnimplementedError(
-      'Android wallpaper requires platform channel setup. '
-      'See ARCHITECTURE.md for Kotlin implementation.',
-    );
+    try {
+      final result = await _channel.invokeMethod<bool>('setWallpaper', {
+        'path': imagePath,
+        'target': 'both',
+      });
+      return result == true;
+    } on PlatformException catch (e) {
+      debugPrint('[AndroidWallpaperAdapter] setWallpaper failed: ${e.message}');
+      return false;
+    }
   }
 }
 
 // ══════════════════════════════════════════════════
-// iOS — Limited (no programmatic wallpaper API)
+// iOS — Save to Photos Library (no programmatic API)
 // ══════════════════════════════════════════════════
 
 class IOSWallpaperAdapter implements WallpaperAdapter {
   @override
-  bool get isSupported => false;
+  // isSupported = true: we save to Photos even if we can't set directly.
+  // Caller should check limitations to render iOS-specific UI.
+  bool get isSupported => true;
 
   @override
   String get limitations =>
       'iOS does not allow apps to set wallpaper programmatically. '
-      'Ziba will show the artwork and offer a "Save to Photos" action.';
+      'Ziba saves the artwork to your Photos library — set it as wallpaper from Settings.';
 
   @override
   Future<bool> setWallpaper(String imagePath) async {
-    // iOS workaround: save image to photos library,
-    // then prompt user to set it manually.
-    // Could also use iOS 16+ Shortcuts integration.
-    throw UnimplementedError(
-      'iOS does not support programmatic wallpaper setting. '
-      'Use the share sheet to save the image.',
-    );
+    try {
+      await Gal.putImage(imagePath, album: 'Ziba');
+      return true;
+    } catch (e) {
+      debugPrint('[IOSWallpaperAdapter] Failed to save to Photos: $e');
+      return false;
+    }
   }
 }
 
