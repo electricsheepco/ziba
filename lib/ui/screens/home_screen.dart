@@ -13,6 +13,7 @@ import '../../state/app_state.dart';
 import '../../ui/crop_math.dart';
 import 'history_screen.dart';
 import 'favorites_screen.dart';
+import '../widgets/ios_wallpaper_sheet.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -474,8 +475,9 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                         FilledButton.icon(
                           onPressed: () => _applyCrop(context),
                           icon: const Icon(Icons.wallpaper, size: 14),
-                          label: const Text('SET AS WALLPAPER',
-                              style: TextStyle(fontSize: 11)),
+                          label: Text(
+                              Platform.isIOS ? 'SAVE TO PHOTOS' : 'SET AS WALLPAPER',
+                              style: const TextStyle(fontSize: 11)),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF6B8EC4),
                             padding: const EdgeInsets.symmetric(
@@ -551,8 +553,9 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                         FilledButton.icon(
                           onPressed: () => _applyCrop(context),
                           icon: const Icon(Icons.wallpaper, size: 14),
-                          label: const Text('SET AS WALLPAPER',
-                              style: TextStyle(fontSize: 11)),
+                          label: Text(
+                              Platform.isIOS ? 'SAVE TO PHOTOS' : 'SET AS WALLPAPER',
+                              style: const TextStyle(fontSize: 11)),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF6B8EC4),
                             padding: const EdgeInsets.symmetric(
@@ -627,8 +630,8 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                   ),
                   const SizedBox(width: 10),
                   _ActionButton(
-                    icon: Icons.wallpaper,
-                    label: 'SET',
+                    icon: Platform.isIOS ? Icons.photo_library_outlined : Icons.wallpaper,
+                    label: Platform.isIOS ? 'SAVE' : 'SET',
                     onTap: () {
                       if (showSlider || showVerticalSlider) {
                         setState(() => _cropMode = true);
@@ -685,6 +688,9 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
 
   Future<void> _applyCrop(BuildContext context) async {
     final artwork = widget.artwork;
+    // Capture context-dependent objects before any awaits.
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
     // Use the actual display resolution for the crop aspect ratio, not the
     // app window size. MediaQuery gives window size; on a Retina MacBook that
@@ -760,11 +766,25 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     await File(croppedPath).writeAsBytes(pngBytes.buffer.asUint8List());
 
     final adapter = ref.read(wallpaperAdapterProvider);
-    await adapter.setWallpaper(croppedPath);
+    final success = await adapter.setWallpaper(croppedPath);
 
-    if (mounted) {
-      // Keep _panOffset so the crop box stays where the user placed it
-      setState(() => _cropMode = false);
+    if (!mounted) return;
+    setState(() => _cropMode = false);
+
+    if (success) {
+      if (Platform.isIOS) {
+        showModalBottomSheet(
+          context: navigator.context,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          builder: (_) => const IOSWallpaperSheet(),
+        );
+      } else if (Platform.isAndroid) {
+        messenger.showSnackBar(const SnackBar(content: Text('Wallpaper set!')));
+      }
+    } else {
+      messenger.showSnackBar(const SnackBar(content: Text('Failed to set wallpaper.')));
     }
   }
 }
