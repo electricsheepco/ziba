@@ -489,7 +489,7 @@ class _ArtworkDetailScreenState extends ConsumerState<ArtworkDetailScreen> {
     await File(croppedPath).writeAsBytes(pngBytes.buffer.asUint8List());
 
     final adapter = ref.read(wallpaperAdapterProvider);
-    await adapter.setWallpaper(croppedPath);
+    await adapter.setWallpaper(croppedPath, bypassDisplayCrop: true);
 
     if (mounted) setState(() => _cropMode = false);
   }

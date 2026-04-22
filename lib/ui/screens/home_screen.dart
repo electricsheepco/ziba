@@ -176,9 +176,7 @@ class _EmptyState extends ConsumerWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () => ref
-                  .read(currentArtworkProvider.notifier)
-                  .refresh(setWallpaper: false),
+              onPressed: () => _getFirstArtwork(context, ref),
               icon: const Icon(Icons.auto_awesome, size: 18),
               label: const Text('GET FIRST ARTWORK'),
               style: FilledButton.styleFrom(
@@ -190,6 +188,23 @@ class _EmptyState extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _getFirstArtwork(BuildContext context, WidgetRef ref) {
+    final settings = ref.read(settingsProvider);
+    final autoRotateOn = settings.autoRotate;
+    ref
+        .read(currentArtworkProvider.notifier)
+        .refresh(setWallpaper: autoRotateOn);
+    if (autoRotateOn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Auto-rotate is on — ziba will set your wallpaper automatically.'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
   }
 }
 
@@ -279,16 +294,23 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  CachedNetworkImage(
+                  LayoutBuilder(builder: (context, constraints) {
+                    final widgetW = constraints.maxWidth;
+                    final widgetH = constraints.maxHeight;
+                    final alignment = _computePreviewAlignment(
+                      widgetW: widgetW,
+                      widgetH: widgetH,
+                      imageNativeSize: imageNativeSize,
+                      displaySize: displaySize,
+                      showSlider: showSlider,
+                      showVerticalSlider: showVerticalSlider,
+                      panOffset: _panOffset,
+                      verticalPanOffset: _verticalPanOffset,
+                    );
+                    return CachedNetworkImage(
                     imageUrl: artwork.image,
                     fit: BoxFit.cover,
-                    // Pan the image when a crop slider is active so the user
-                    // sees which portion will be used as wallpaper.
-                    alignment: showSlider
-                        ? Alignment(_panOffset * 2 - 1, 0)
-                        : showVerticalSlider
-                            ? Alignment(0, _verticalPanOffset * 2 - 1)
-                            : Alignment.center,
+                    alignment: alignment,
                     placeholder: (_, __) => Container(
                       color: theme.colorScheme.surfaceContainerHighest,
                       child: const Center(
@@ -299,7 +321,8 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                       color: theme.colorScheme.errorContainer,
                       child: const Icon(Icons.broken_image),
                     ),
-                  ),
+                  );
+                  }),
                   // Dim preview
                   if (_dimLevel != null && _dimLevel! > 0)
                     Positioned.fill(
@@ -644,6 +667,17 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
                 ],
               ),
 
+              // Multi-display preview — desktop only
+              if (!Platform.isIOS && !Platform.isAndroid)
+                _DisplayPreviewRow(
+                  imageUrl: artwork.image,
+                  imageNativeSize: imageNativeSize,
+                  panOffset: _panOffset,
+                  verticalPanOffset: _verticalPanOffset,
+                  showSlider: showSlider,
+                  showVerticalSlider: showVerticalSlider,
+                ),
+
               // Dim slider
               if (_dimLevel != null) ...[
                 const SizedBox(height: 8),
@@ -685,6 +719,69 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
       _panOffset = 0.0;
       _verticalPanOffset = 0.0;
     });
+  }
+
+  /// Computes the correct [Alignment] for [BoxFit.cover] so the center of the
+  /// crop window in image-pixel space appears centered in the preview widget.
+  ///
+  /// The naive `Alignment(panOffset * 2 - 1, 0)` only works when the widget
+  /// has the SAME aspect ratio as the display. When the app window is portrait
+  /// and the display is landscape, the image is scaled by its height under
+  /// cover, and the horizontal overflow is much larger than the crop range,
+  /// causing the image to pan far past the actual crop edges.
+  Alignment _computePreviewAlignment({
+    required double widgetW,
+    required double widgetH,
+    required Size imageNativeSize,
+    required Size displaySize,
+    required bool showSlider,
+    required bool showVerticalSlider,
+    required double panOffset,
+    required double verticalPanOffset,
+  }) {
+    if (widgetW == 0 || widgetH == 0) return Alignment.center;
+    final imageW = imageNativeSize.width;
+    final imageH = imageNativeSize.height;
+    if (imageW == 0 || imageH == 0) return Alignment.center;
+
+    final imageAspect = imageW / imageH;
+    final widgetAspect = widgetW / widgetH;
+
+    if (showSlider) {
+      // Image is wider than display. Under BoxFit.cover in the widget:
+      // if imageAspect > widgetAspect the image is scaled by height.
+      final scale = imageAspect > widgetAspect
+          ? widgetH / imageH
+          : widgetW / imageW;
+      final scaledW = imageW * scale;
+      final hOverflow = scaledW - widgetW;
+
+      if (hOverflow <= 0) return Alignment(panOffset * 2 - 1, 0);
+
+      final screenAspect = displaySize.width / displaySize.height;
+      final cropW = imageH * screenAspect;
+      final cropCenterX = (imageW - cropW) * panOffset + cropW / 2;
+      final offset = cropCenterX * scale - widgetW / 2;
+      return Alignment((offset / hOverflow * 2 - 1).clamp(-1.0, 1.0), 0);
+    }
+
+    if (showVerticalSlider) {
+      final scale = imageAspect < widgetAspect
+          ? widgetW / imageW
+          : widgetH / imageH;
+      final scaledH = imageH * scale;
+      final vOverflow = scaledH - widgetH;
+
+      if (vOverflow <= 0) return Alignment(0, verticalPanOffset * 2 - 1);
+
+      final screenAspect = displaySize.width / displaySize.height;
+      final cropH = imageW / screenAspect;
+      final cropCenterY = (imageH - cropH) * verticalPanOffset + cropH / 2;
+      final offset = cropCenterY * scale - widgetH / 2;
+      return Alignment(0, (offset / vOverflow * 2 - 1).clamp(-1.0, 1.0));
+    }
+
+    return Alignment.center;
   }
 
   Future<void> _applyCrop(BuildContext context) async {
@@ -767,7 +864,9 @@ class _ArtworkDisplayState extends ConsumerState<_ArtworkDisplay> {
     await File(croppedPath).writeAsBytes(pngBytes.buffer.asUint8List());
 
     final adapter = ref.read(wallpaperAdapterProvider);
-    final success = await adapter.setWallpaper(croppedPath);
+    // bypassDisplayCrop: the image is already cropped for the primary display.
+    // The adapter must not re-crop it per-display.
+    final success = await adapter.setWallpaper(croppedPath, bypassDisplayCrop: true);
 
     if (!mounted) return;
     setState(() => _cropMode = false);
@@ -1064,6 +1163,176 @@ class _RefreshButton extends ConsumerWidget {
           .refresh(setWallpaper: false),
       icon: const Icon(Icons.refresh, size: 18),
       label: const Text('TRY AGAIN'),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════
+// Multi-display preview — "How it will look"
+// ══════════════════════════════════════════════════
+
+class _DisplayPreviewRow extends StatelessWidget {
+  final String imageUrl;
+  final Size imageNativeSize;
+  final double panOffset;
+  final double verticalPanOffset;
+  final bool showSlider;
+  final bool showVerticalSlider;
+
+  const _DisplayPreviewRow({
+    required this.imageUrl,
+    required this.imageNativeSize,
+    required this.panOffset,
+    required this.verticalPanOffset,
+    required this.showSlider,
+    required this.showVerticalSlider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final displays = ui.PlatformDispatcher.instance.displays.toList();
+    if (displays.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    const thumbH = 56.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.monitor_outlined, size: 11,
+                  color: Color(0xFF6B8EC4)),
+              const SizedBox(width: 5),
+              Text(
+                'HOW IT WILL LOOK',
+                style: TextStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.5,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < displays.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  _DisplayThumbnail(
+                    display: displays[i],
+                    displayIndex: i,
+                    imageUrl: imageUrl,
+                    imageNativeSize: imageNativeSize,
+                    panOffset: panOffset,
+                    verticalPanOffset: verticalPanOffset,
+                    showSlider: showSlider,
+                    showVerticalSlider: showVerticalSlider,
+                    thumbH: thumbH,
+                    theme: theme,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DisplayThumbnail extends StatelessWidget {
+  final ui.Display display;
+  final int displayIndex;
+  final String imageUrl;
+  final Size imageNativeSize;
+  final double panOffset;
+  final double verticalPanOffset;
+  final bool showSlider;
+  final bool showVerticalSlider;
+  final double thumbH;
+  final ThemeData theme;
+
+  const _DisplayThumbnail({
+    required this.display,
+    required this.displayIndex,
+    required this.imageUrl,
+    required this.imageNativeSize,
+    required this.panOffset,
+    required this.verticalPanOffset,
+    required this.showSlider,
+    required this.showVerticalSlider,
+    required this.thumbH,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final displayAspect = display.size.width / display.size.height;
+    final thumbW = (thumbH * displayAspect).clamp(40.0, 200.0);
+    final imageAspect = imageNativeSize.width / imageNativeSize.height;
+
+    // Tolerance matches the adapter (5%). Within tolerance → fit (no crop).
+    final diff = (imageAspect - displayAspect).abs() / displayAspect;
+    final usesFit = diff < 0.05;
+
+    // Alignment: since the thumbnail has the exact display aspect ratio,
+    // BoxFit.cover + panOffset * 2 - 1 is geometrically correct here.
+    Alignment alignment;
+    if (!usesFit && showSlider && imageAspect > displayAspect + 0.05) {
+      alignment = Alignment(panOffset * 2 - 1, 0);
+    } else if (!usesFit && showVerticalSlider && imageAspect < displayAspect - 0.05) {
+      alignment = Alignment(0, verticalPanOffset * 2 - 1);
+    } else {
+      alignment = Alignment.center;
+    }
+
+    final label = displayIndex == 0 ? 'Built-in' : 'Display ${displayIndex + 1}';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: thumbW,
+          height: thumbH,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: CachedNetworkImage(
+              imageUrl: imageUrl,
+              fit: usesFit ? BoxFit.contain : BoxFit.cover,
+              alignment: alignment,
+              placeholder: (_, __) => Container(
+                color: theme.colorScheme.surfaceContainerHighest,
+              ),
+              errorWidget: (_, __, ___) =>
+                  const Icon(Icons.broken_image, size: 16),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            letterSpacing: 0.5,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+          ),
+        ),
+      ],
     );
   }
 }

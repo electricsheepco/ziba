@@ -11,7 +11,11 @@ import 'package:gal/gal.dart';
 /// the right one at runtime.
 abstract class WallpaperAdapter {
   /// Set the desktop/home screen wallpaper from a local file path.
-  Future<bool> setWallpaper(String imagePath);
+  ///
+  /// When [bypassDisplayCrop] is true (manual user crop), the image is
+  /// already cropped for the primary display and should be set as-is on all
+  /// displays without further per-display processing.
+  Future<bool> setWallpaper(String imagePath, {bool bypassDisplayCrop = false});
 
   /// Check if wallpaper setting is supported on this platform.
   bool get isSupported;
@@ -43,29 +47,58 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
   String get limitations => 'Sets wallpaper on all desktops/spaces.';
 
   @override
-  Future<bool> setWallpaper(String imagePath) async {
+  Future<bool> setWallpaper(String imagePath,
+      {bool bypassDisplayCrop = false}) async {
     final displays = ui.PlatformDispatcher.instance.displays;
+
+    // When called from manual user crop the image is already correctly cropped
+    // for the primary display — set it on all desktops without re-cropping.
+    if (bypassDisplayCrop) {
+      final count = displays.isEmpty ? 1 : displays.length;
+      final scriptLines = ['tell application "System Events"'];
+      for (int i = 0; i < count; i++) {
+        scriptLines
+          ..add('  try')
+          ..add('    tell desktop ${i + 1}')
+          ..add('      set picture to POSIX file "$imagePath"')
+          ..add('      set picture scale to 1')
+          ..add('    end tell')
+          ..add('  end try');
+      }
+      scriptLines.add('end tell');
+      final result =
+          await Process.run('osascript', ['-e', scriptLines.join('\n')]);
+      return result.exitCode == 0;
+    }
 
     // Generate a per-display crop. Different screens have different aspect ratios
     // (e.g. built-in 16:10 vs LG ultrawide 21:9) and each needs its own crop.
     final displayList = displays.toList();
-    final cropPaths = <String>[];
+    final results = <({String path, bool cropped})>[];
     for (int i = 0; i < displayList.length; i++) {
-      cropPaths.add(
+      results.add(
           await _cropForDisplay(imagePath, displayList[i], displayIndex: i));
     }
-    if (cropPaths.isEmpty) cropPaths.add(imagePath);
+    if (results.isEmpty) results.add((path: imagePath, cropped: false));
 
     // Method 1: osascript — target each desktop by index.
     // desktop N in System Events matches display N-1 in macOS display order,
     // which should align with Flutter's displays list (main display first).
     // Each desktop gets its own pre-cropped image.
+    //
+    // picture scale values: 1=fill (zoom to fill, no bars), 2=fit (show full, may bar).
+    // When we pre-cropped to the display ratio, fill is lossless.
+    // When the image already matches the display, fit preserves the full painting.
     final scriptLines = ['tell application "System Events"'];
-    for (int i = 0; i < cropPaths.length; i++) {
+    for (int i = 0; i < results.length; i++) {
+      final r = results[i];
+      final scale = r.cropped ? 1 : 2;
       scriptLines
         ..add('  try')
-        ..add(
-            '    set picture of desktop ${i + 1} to POSIX file "${cropPaths[i]}"')
+        ..add('    tell desktop ${i + 1}')
+        ..add('      set picture to POSIX file "${r.path}"')
+        ..add('      set picture scale to $scale')
+        ..add('    end tell')
         ..add('  end try');
     }
     scriptLines.add('end tell');
@@ -80,7 +113,7 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
         '${Platform.environment['HOME']}/Library/Application Support/Dock/desktoppicture.db';
     final sqlResult = await Process.run('sqlite3', [
       dbPath,
-      "UPDATE data SET value = '${cropPaths.first}';",
+      "UPDATE data SET value = '${results.first.path}';",
     ]);
 
     if (sqlResult.exitCode == 0) {
@@ -96,10 +129,10 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
   ///
   /// - Image taller than display ratio: top-anchor crop (preserves upper composition).
   /// - Image wider than display ratio: center-crop horizontally (even side trim).
-  /// - Image already within 1% of display ratio: returned unchanged.
+  /// - Image already within 5% of display ratio: returned unchanged (cropped=false).
   ///
-  /// Returns the original path if any step fails.
-  Future<String> _cropForDisplay(
+  /// Returns the original path with cropped=false if any step fails.
+  Future<({String path, bool cropped})> _cropForDisplay(
     String imagePath,
     ui.Display display, {
     required int displayIndex,
@@ -107,7 +140,11 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
     try {
       final screenW = display.size.width;
       final screenH = display.size.height;
-      if (screenW == 0 || screenH == 0) return imagePath;
+      if (screenW == 0 || screenH == 0) {
+        debugPrint(
+            '[MacOSWallpaperAdapter] Display $displayIndex reported size 0 — skipping crop');
+        return (path: imagePath, cropped: false);
+      }
       final screenAspect = screenW / screenH;
 
       final bytes = await File(imagePath).readAsBytes();
@@ -118,10 +155,17 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
       final imageHeight = srcImage.height;
       final imageAspect = imageWidth / imageHeight;
 
-      // Within 1% of display aspect — no crop needed.
-      if ((imageAspect - screenAspect).abs() / screenAspect < 0.01) {
+      debugPrint(
+          '[MacOSWallpaperAdapter] Display $displayIndex '
+          '(${screenW.toInt()}×${screenH.toInt()}, ratio=${screenAspect.toStringAsFixed(3)}): '
+          'image $imageWidth×$imageHeight ratio=${imageAspect.toStringAsFixed(3)}');
+
+      // Within 5% of display aspect — no crop needed; use fit-to-screen instead.
+      if ((imageAspect - screenAspect).abs() / screenAspect < 0.05) {
         srcImage.dispose();
-        return imagePath;
+        debugPrint(
+            '[MacOSWallpaperAdapter] Display $displayIndex: ratio match within 5%, no crop');
+        return (path: imagePath, cropped: false);
       }
 
       final int srcX, srcY, srcW, srcH;
@@ -155,22 +199,21 @@ class MacOSWallpaperAdapter implements WallpaperAdapter {
       final byteData =
           await cropped.toByteData(format: ui.ImageByteFormat.png);
       cropped.dispose();
-      if (byteData == null) return imagePath;
+      if (byteData == null) return (path: imagePath, cropped: false);
 
       final croppedPath = imagePath.replaceAll(
           RegExp(r'\.[^.]+$'), '_cropped_$displayIndex.png');
       await File(croppedPath).writeAsBytes(byteData.buffer.asUint8List());
 
       debugPrint(
-          '[MacOSWallpaperAdapter] Display $displayIndex '
-          '(${screenW.toInt()}×${screenH.toInt()}): '
+          '[MacOSWallpaperAdapter] Display $displayIndex: '
           'cropped $imageWidth×$imageHeight → $srcW×$srcH');
 
-      return croppedPath;
+      return (path: croppedPath, cropped: true);
     } catch (e) {
       debugPrint(
           '[MacOSWallpaperAdapter] Pre-crop failed for display $displayIndex: $e');
-      return imagePath;
+      return (path: imagePath, cropped: false);
     }
   }
 }
@@ -188,7 +231,8 @@ class LinuxWallpaperAdapter implements WallpaperAdapter {
       'Supports GNOME, KDE Plasma, XFCE, Hyprland, sway, i3/feh.';
 
   @override
-  Future<bool> setWallpaper(String imagePath) async {
+  Future<bool> setWallpaper(String imagePath,
+      {bool bypassDisplayCrop = false}) async {
     final de = _detectDesktopEnvironment();
 
     switch (de) {
@@ -296,7 +340,8 @@ class WindowsWallpaperAdapter implements WallpaperAdapter {
   String get limitations => 'Sets desktop wallpaper via Win32 API.';
 
   @override
-  Future<bool> setWallpaper(String imagePath) async {
+  Future<bool> setWallpaper(String imagePath,
+      {bool bypassDisplayCrop = false}) async {
     // Convert forward slashes for Windows
     final winPath = imagePath.replaceAll('/', '\\');
 
@@ -335,7 +380,8 @@ class AndroidWallpaperAdapter implements WallpaperAdapter {
   String get limitations => 'Sets home + lock screen wallpaper via WallpaperManager.';
 
   @override
-  Future<bool> setWallpaper(String imagePath) async {
+  Future<bool> setWallpaper(String imagePath,
+      {bool bypassDisplayCrop = false}) async {
     try {
       final result = await _channel.invokeMethod<bool>('setWallpaper', {
         'path': imagePath,
@@ -365,7 +411,8 @@ class IOSWallpaperAdapter implements WallpaperAdapter {
       'Ziba saves the artwork to your Photos library — set it as wallpaper from Settings.';
 
   @override
-  Future<bool> setWallpaper(String imagePath) async {
+  Future<bool> setWallpaper(String imagePath,
+      {bool bypassDisplayCrop = false}) async {
     try {
       await Gal.putImage(imagePath, album: 'Ziba');
       return true;
@@ -391,5 +438,6 @@ class _UnsupportedAdapter implements WallpaperAdapter {
   String get limitations => '$platform is not supported for wallpaper setting.';
 
   @override
-  Future<bool> setWallpaper(String imagePath) async => false;
+  Future<bool> setWallpaper(String imagePath,
+      {bool bypassDisplayCrop = false}) async => false;
 }
